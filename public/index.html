@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>email-org</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="topbar">
+    <h1>email-org</h1>
+    <label class="filter">
+      <input type="checkbox" id="filter-quiet">
+      no mail in last <input type="number" id="filter-months" value="6" min="1" max="120"> months
+    </label>
+    <select id="filter-done">
+      <option value="all">all folders</option>
+      <option value="notdone">not done</option>
+      <option value="done">done</option>
+      <option value="donebefore">done before…</option>
+    </select>
+    <input type="date" id="filter-done-date" hidden>
+    <span class="spacer"></span>
+    <button id="btn-sync-all" title="Re-list folders on every account">Sync all</button>
+    <button id="btn-add-account">Add account</button>
+  </header>
+
+  <div id="layout">
+    <nav id="sidebar"></nav>
+    <main id="main">
+      <div id="folder-header" hidden>
+        <span id="folder-title"></span>
+        <button id="btn-refresh-folder" title="Resync this folder">↻</button>
+        <span id="folder-meta"></span>
+      </div>
+      <div id="message-pane">
+        <p class="placeholder">Select a folder to see its messages.</p>
+      </div>
+    </main>
+  </div>
+
+  <div id="batch-bar" hidden></div>
+  <div id="context-menu" hidden></div>
+  <div id="toasts"></div>
+
+  <dialog id="account-dialog">
+    <form id="account-form" method="dialog">
+      <h2 id="account-dialog-title">Add account</h2>
+      <label>Name <input name="name" required placeholder="Work"></label>
+      <label>Host <input name="host" required placeholder="mail.example.com"></label>
+      <div class="row2">
+        <label>Port <input name="port" type="number" value="993"></label>
+        <label class="check"><input name="secure" type="checkbox" checked> TLS (unchecked = STARTTLS)</label>
+      </div>
+      <label>Username <input name="username" required></label>
+      <label>Password <input name="password" type="password" placeholder="(unchanged)"></label>
+      <label class="check"><input name="allowUntrustedCert" type="checkbox"> Allow untrusted certificate</label>
+      <div class="dialog-actions">
+        <span id="account-test-result"></span>
+        <button type="button" id="btn-test-account">Test</button>
+        <button type="button" id="btn-cancel-account">Cancel</button>
+        <button type="submit" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

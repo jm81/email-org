@@ -1,0 +1,70 @@
+# email-org
+
+A local, single-user web app for bulk-organizing IMAP email folders — the
+old-school folder-hierarchy workflow that modern clients (looking at you,
+Spark) make painful. See `notes-for-claude.md` for the original spec.
+
+**Local use only.** It binds to 127.0.0.1 and stores account passwords in
+plaintext in a local SQLite db (`data/app.db`). Never expose it to a network.
+
+## Run
+
+```sh
+npm install
+npm start          # http://127.0.0.1:8323
+```
+
+Add an account (top right). For self-hosted servers with a self-signed
+certificate, check "Allow untrusted certificate". Use "Test" before saving.
+
+## What it does
+
+- **Folder tree** for all accounts: expand/collapse, message counts, and a
+  hint showing the month of each folder's most recent mail
+- **Right-click a folder** (or its `⋮`): add subfolder (inline, no dialog),
+  sync, mark done, flatten, delete
+- **Flatten**: moves every message in a folder's whole subtree up into that
+  folder, then deletes the subfolders (deepest-first; a subfolder is only
+  deleted after it is verified empty, so it's safe to re-run after a failure)
+- **Message list**: click a row for a ~4-line text preview, double-click for
+  the full text, click again to collapse; checkboxes + shift-click for ranges
+- **Batch move/delete** with a single inline confirm (Enter confirms, Esc
+  cancels). "Move to…" opens a type-ahead folder picker spanning all
+  accounts — picking a folder in another account does a cross-account move
+  (fetch → append → verified delete, so a failure can duplicate but never lose)
+- **Done tracking**: "Mark done" stamps a local timestamp on the folder;
+  filter by done state / done-before-date in the top bar
+- **Quiet-folder filter**: show only folders with no mail in the last N months
+- **Sync model**: message headers are cached in SQLite; a folder syncs when
+  first opened, via ↻, or after any operation touching it. Bodies are always
+  fetched live. Destructive operations verify the folder's UIDVALIDITY on the
+  server first and refuse to run on a stale cache.
+
+## Tests
+
+```sh
+npm test           # integration tests: real API against a throwaway Dovecot
+npm run e2e        # drives the actual UI with headless Chrome
+```
+
+Both start their own disposable Dovecot (`brew install dovecot`) on
+127.0.0.1:1143 with all state under `test/tmp/`. Two quirks of running Dovecot
+2.4 unprivileged on modern macOS are handled by `test/start-dovecot.sh`: a
+`DYLD_INSERT_LIBRARIES` shim that no-ops `setrlimit` (macOS rejects
+RLIMIT_DATA changes, which kills every Dovecot child), and cleartext-only IMAP
+(Dovecot's TLS login proxy drops post-login writes on macOS). TLS against real
+servers is unaffected — that limitation is purely in the local test server.
+
+## Layout
+
+```
+server.js            express app (port 8323, override with PORT)
+src/db.js            sqlite open + schema (data dir override: EMAIL_ORG_DATA)
+src/imap/pool.js     one connection per account, all ops serialized per account
+src/imap/sync.js     folder-list + per-folder header sync (UIDVALIDITY-aware)
+src/imap/ops.js      create/delete folder, flatten, batch delete, moves
+src/imap/body.js     on-demand body fetch + text extraction (mailparser)
+src/routes/          /api/accounts, /api/folders, /api/messages, /api/jobs
+public/              vanilla-JS frontend, no build step
+test/                integration + e2e suites and the throwaway Dovecot
+```
