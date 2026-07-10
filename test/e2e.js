@@ -73,7 +73,25 @@ await page.evaluate(() =>
 await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 4, { timeout: 15000 });
 ok('batch delete removes the message from the list');
 
-// 8. Context menu on folder (right-click)
+// 8. Per-message context menu (right-click a row) deletes that single message
+// (again the oldest row, to keep INBOX recently active for the quiet filter)
+await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('tr.msg')];
+  rows[rows.length - 1].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }));
+});
+await page.waitForSelector('#context-menu:not([hidden])', { timeout: 3000 });
+const msgMenu = await page.$$eval('#context-menu .item', (els) => els.map((e) => e.textContent));
+if (!msgMenu.includes('Move to…')) fail(`message menu missing Move to…: ${msgMenu}`);
+if (!msgMenu.includes('Delete')) fail(`message menu missing Delete: ${msgMenu}`);
+await page.evaluate(() =>
+  [...document.querySelectorAll('#context-menu .item')].find((i) => i.textContent === 'Delete').click());
+await page.waitForFunction(() => document.querySelector('#batch-bar')?.textContent.includes('Delete "inbox-'), { timeout: 3000 });
+await page.evaluate(() =>
+  [...document.querySelectorAll('#batch-bar button')].find((b) => b.textContent === 'Delete').click());
+await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 3, { timeout: 15000 });
+ok('message context menu deletes a single message');
+
+// 9. Context menu on folder (right-click)
 await page.evaluate(() => {
   const row = [...document.querySelectorAll('.folder-row')].find((r) => r.querySelector('.folder-name').textContent === 'Archive');
   row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 200, clientY: 200 }));
@@ -84,7 +102,7 @@ if (!menuItems.some((t) => t.includes('Add subfolder'))) fail(`menu items: ${men
 if (!menuItems.some((t) => t.includes('Flatten'))) fail(`menu missing flatten: ${menuItems}`);
 ok(`context menu shows: ${menuItems.join(' | ')}`);
 
-// 9. Quiet-folder filter hides recently-active folders
+// 10. Quiet-folder filter hides recently-active folders
 await page.keyboard.press('Escape');
 await page.click('#filter-quiet');
 await page.waitForFunction(() =>

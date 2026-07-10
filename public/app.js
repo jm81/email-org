@@ -98,21 +98,21 @@ function redrawBatchBar() {
 
   const move = document.createElement('button');
   move.textContent = 'Move to…';
-  move.addEventListener('click', () => pickMoveTarget());
+  move.addEventListener('click', () => pickMoveTarget([...state.selection]));
 
   bar.append(count, move);
 
   if (state.lastMoveTarget && getFolderById(state.lastMoveTarget.id)) {
     const again = document.createElement('button');
     again.textContent = `Move to ${state.lastMoveTarget.name}`;
-    again.addEventListener('click', () => moveSelection(state.lastMoveTarget));
+    again.addEventListener('click', () => moveMessages([...state.selection], state.lastMoveTarget));
     bar.appendChild(again);
   }
 
   const del = document.createElement('button');
   del.className = 'danger';
   del.textContent = 'Delete';
-  del.addEventListener('click', () => deleteSelection());
+  del.addEventListener('click', () => deleteMessages([...state.selection]));
 
   const clear = document.createElement('button');
   clear.textContent = 'Clear';
@@ -176,31 +176,35 @@ async function runJob(startPromise, progressLabel, accountIds) {
   await afterMutation(accountIds);
 }
 
-/* ---------- batch actions ---------- */
-async function deleteSelection() {
+/* ---------- move/delete actions (batch bar and per-message menu) ---------- */
+function messagesLabel(ids) {
+  return `${ids.length} message${ids.length > 1 ? 's' : ''}`;
+}
+
+async function deleteMessages(ids, label = messagesLabel(ids)) {
   const folder = getFolderById(state.selectedFolderId);
-  const ids = [...state.selection];
-  const ok = await confirmInBar(`Delete ${ids.length} message${ids.length > 1 ? 's' : ''} from "${folder?.name}"?`, 'Delete');
+  const ok = await confirmInBar(`Delete ${label} from "${folder?.name}"?`, 'Delete');
   if (!ok) return;
   await runJob(api.deleteMessages(ids), 'Deleting', [folder.account_id]);
 }
 
-function pickMoveTarget() {
+function pickMoveTarget(ids, label, opts) {
   showFolderPicker(
     { accounts: state.accounts, foldersByAccount: state.foldersByAccount, excludeFolderId: state.selectedFolderId },
-    (target) => moveSelection(target)
+    (target) => moveMessages(ids, target, label, opts)
   );
 }
 
-async function moveSelection(target) {
+async function moveMessages(ids, target, label = messagesLabel(ids), { confirm = true } = {}) {
   const source = getFolderById(state.selectedFolderId);
-  const ids = [...state.selection];
-  const cross = source && source.account_id !== target.account_id;
-  const targetLabel = cross
-    ? `${state.accounts.find((a) => a.id === target.account_id)?.name} / ${target.path}`
-    : target.path;
-  const ok = await confirmInBar(`Move ${ids.length} message${ids.length > 1 ? 's' : ''} to "${targetLabel}"?`, 'Move');
-  if (!ok) return;
+  if (confirm) {
+    const cross = source && source.account_id !== target.account_id;
+    const targetLabel = cross
+      ? `${state.accounts.find((a) => a.id === target.account_id)?.name} / ${target.path}`
+      : target.path;
+    const ok = await confirmInBar(`Move ${label} to "${targetLabel}"?`, 'Move');
+    if (!ok) return;
+  }
   state.lastMoveTarget = target;
   await runJob(api.moveMessages(ids, target.id), 'Moving', [source.account_id, target.account_id]);
 }
@@ -352,6 +356,19 @@ const messageHandlers = {
     } else {
       loadBody(msg, 'full');
     }
+  },
+  onRowMenu: (msg, x, y) => {
+    const ids = [msg.id];
+    const subject = msg.subject || '(no subject)';
+    const label = `"${subject.length > 60 ? subject.slice(0, 59) + '…' : subject}"`;
+    const items = [
+      { label: 'Move to…', action: () => pickMoveTarget(ids, label, { confirm: false }) },
+    ];
+    if (state.lastMoveTarget && getFolderById(state.lastMoveTarget.id)) {
+      items.push({ label: `Move to ${state.lastMoveTarget.name}`, action: () => moveMessages(ids, state.lastMoveTarget, label, { confirm: false }) });
+    }
+    items.push('-', { label: 'Delete', danger: true, action: () => deleteMessages(ids, label) });
+    showMenu(x, y, items);
   },
 };
 

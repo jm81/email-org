@@ -73,6 +73,10 @@ export function renderMessages(container, state, handlers) {
       clearTimeout(clickTimer);
       handlers.onRowDblClick(msg);
     });
+    tr.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      handlers.onRowMenu(msg, e.clientX, e.clientY);
+    });
 
     tbody.appendChild(tr);
 
