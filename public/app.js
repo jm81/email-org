@@ -143,6 +143,20 @@ async function selectFolder(folder, { forceSync = false } = {}) {
   });
 }
 
+function goToFolder(folder) {
+  // Expand every ancestor so the folder is visible in the tree.
+  const delim = folder.delimiter || '/';
+  const parts = folder.path.split(delim);
+  let path = null;
+  for (const part of parts.slice(0, -1)) {
+    path = path ? path + delim + part : part;
+    state.expanded.add(`${folder.account_id}:${path}`);
+  }
+  localStorage.setItem('expanded', JSON.stringify([...state.expanded]));
+  selectFolder(folder); // redraws the tree synchronously before its first await
+  document.querySelector('.folder-row.selected')?.scrollIntoView({ block: 'nearest' });
+}
+
 async function afterMutation(accountIds) {
   await Promise.all([...new Set(accountIds)].map(reloadFolders));
   if (state.selectedFolderId) {
@@ -444,6 +458,13 @@ function wireAccountDialog() {
 /* ---------- top bar ---------- */
 function wireTopbar() {
   $('btn-add-account').addEventListener('click', () => openAccountDialog());
+
+  $('btn-goto').addEventListener('click', () => {
+    showFolderPicker(
+      { accounts: state.accounts, foldersByAccount: state.foldersByAccount },
+      (folder) => goToFolder(folder)
+    );
+  });
 
   $('btn-sync-all').addEventListener('click', () => guard(async () => {
     for (const account of state.accounts) {

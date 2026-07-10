@@ -102,7 +102,21 @@ if (!menuItems.some((t) => t.includes('Add subfolder'))) fail(`menu items: ${men
 if (!menuItems.some((t) => t.includes('Flatten'))) fail(`menu missing flatten: ${menuItems}`);
 ok(`context menu shows: ${menuItems.join(' | ')}`);
 
-// 10. Quiet-folder filter hides recently-active folders
+// 10. Go to… picker jumps to a folder and expands the tree down to it
+await page.keyboard.press('Escape'); // close the folder context menu
+await page.click('#btn-goto');
+await page.waitForSelector('#folder-picker input', { timeout: 3000 });
+await page.type('#folder-picker input', 'q1');
+await page.keyboard.press('Enter');
+await page.waitForFunction(() =>
+  document.querySelector('#folder-title')?.textContent === 'Archive / 2023 / Q1', { timeout: 15000 });
+const selectedName = await page.evaluate(() =>
+  document.querySelector('.folder-row.selected .folder-name')?.textContent);
+if (selectedName !== 'Q1') fail(`expected Q1 selected in tree, got: ${selectedName}`);
+await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 3, { timeout: 15000 });
+ok('Go to… opens the folder and expands the tree to it');
+
+// 11. Quiet-folder filter hides recently-active folders
 await page.keyboard.press('Escape');
 await page.click('#filter-quiet');
 await page.waitForFunction(() =>
