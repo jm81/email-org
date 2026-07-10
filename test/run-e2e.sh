@@ -10,7 +10,7 @@ node "$HERE/seed.js"
 
 PORT=8399 EMAIL_ORG_DATA="$HERE/tmp/e2e-data" node "$ROOT/server.js" &
 SERVER_PID=$!
-trap 'kill $SERVER_PID 2>/dev/null; wait $SERVER_PID 2>/dev/null; "$HERE/stop-dovecot.sh"' EXIT
+trap 'kill $SERVER_PID 2>/dev/null; wait $SERVER_PID 2>/dev/null || true; "$HERE/stop-dovecot.sh"' EXIT
 for i in $(seq 1 40); do
   curl -sf http://127.0.0.1:8399/api/accounts >/dev/null 2>&1 && break
   sleep 0.25
