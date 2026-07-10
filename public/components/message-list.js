@@ -24,10 +24,10 @@ export function renderMessages(container, state, handlers) {
   const table = document.createElement('table');
   table.className = 'messages';
   table.innerHTML = `
-    <colgroup><col class="c-check"><col class="c-from"><col class="c-subject"><col class="c-date"><col class="c-to"></colgroup>
+    <colgroup><col class="c-check"><col class="c-from"><col class="c-subject"><col class="c-attach"><col class="c-date"><col class="c-to"></colgroup>
     <thead><tr>
       <th class="check"><input type="checkbox" id="check-all"></th>
-      <th>From</th><th>Subject</th><th>Date</th><th>To</th>
+      <th>From</th><th>Subject</th><th class="attach" title="Attachments">📎</th><th>Date</th><th>To</th>
     </tr></thead>`;
   const tbody = document.createElement('tbody');
 
@@ -53,8 +53,14 @@ export function renderMessages(container, state, handlers) {
       td.title = title ?? text ?? '';
       return td;
     };
+    const nAttach = msg.attachment_count;
+    const tdAttach = mk(
+      nAttach == null ? '?' : nAttach > 0 ? String(nAttach) : '',
+      nAttach == null ? 'Attachment count unknown — sync this folder to fill it in'
+        : nAttach > 0 ? `${nAttach} attachment${nAttach === 1 ? '' : 's'}` : 'No attachments');
+    tdAttach.className = 'attach';
     tr.append(tdCheck, mk(msg.from_addr), mk(msg.subject || '(no subject)'),
-      mk(fmtDate(msg.date)), mk(msg.to_addrs));
+      tdAttach, mk(fmtDate(msg.date)), mk(msg.to_addrs));
 
     // Click toggles preview, double-click opens full; timer disambiguates.
     let clickTimer = null;
@@ -75,7 +81,7 @@ export function renderMessages(container, state, handlers) {
       const trBody = document.createElement('tr');
       trBody.className = 'msg-body';
       const td = document.createElement('td');
-      td.colSpan = 5;
+      td.colSpan = 6;
       if (expansion.loading) {
         td.textContent = 'Loading…';
       } else {

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS messages (
   internaldate TEXT,
   size INTEGER,
   flags TEXT,
+  attachment_count INTEGER,
   UNIQUE (folder_id, uid)
 );
 

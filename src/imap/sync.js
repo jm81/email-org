@@ -59,10 +59,23 @@ export function getFolder(folderId) {
 }
 
 const insertMessage = db.prepare(`
-  INSERT INTO messages (folder_id, uid, uidvalidity, subject, from_addr, to_addrs, date, internaldate, size, flags)
-  VALUES (@folder_id, @uid, @uidvalidity, @subject, @from_addr, @to_addrs, @date, @internaldate, @size, @flags)
+  INSERT INTO messages (folder_id, uid, uidvalidity, subject, from_addr, to_addrs, date, internaldate, size, flags, attachment_count)
+  VALUES (@folder_id, @uid, @uidvalidity, @subject, @from_addr, @to_addrs, @date, @internaldate, @size, @flags, @attachment_count)
   ON CONFLICT (folder_id, uid) DO UPDATE SET flags=excluded.flags
 `);
+
+// A part counts as an attachment if the sender marked it one, or if it's a
+// named non-inline leaf (many senders omit Content-Disposition entirely).
+// Counted nodes aren't descended into, so an attached .eml counts as one.
+function countAttachments(node) {
+  if (!node) return 0;
+  const filename = node.dispositionParameters?.filename ?? node.parameters?.name;
+  if (node.disposition === 'attachment' ||
+      (filename != null && node.disposition !== 'inline' && !node.type?.startsWith('multipart/'))) {
+    return 1;
+  }
+  return (node.childNodes ?? []).reduce((n, child) => n + countAttachments(child), 0);
+}
 
 function fmtAddr(list) {
   if (!list?.length) return null;
@@ -82,6 +95,7 @@ function rowFromFetch(folderId, uidvalidity, msg) {
     internaldate: msg.internalDate ? new Date(msg.internalDate).toISOString() : null,
     size: msg.size ?? null,
     flags: JSON.stringify([...(msg.flags ?? [])]),
+    attachment_count: msg.bodyStructure ? countAttachments(msg.bodyStructure) : null,
   };
 }
 
@@ -109,12 +123,26 @@ export async function syncFolderMessages(folderId) {
       const rows = [];
       if (missingUids.length) {
         for await (const msg of client.fetch(missingUids.join(','), {
-          uid: true, envelope: true, internalDate: true, flags: true, size: true,
+          uid: true, envelope: true, internalDate: true, flags: true, size: true, bodyStructure: true,
         }, { uid: true })) {
           rows.push(rowFromFetch(folderId, uidValidity, msg));
         }
       }
-      return { uidValidity, uidNext: mailbox.uidNext, fullResync, liveUids, rows };
+
+      // Backfill: rows cached before attachment_count existed are never
+      // refetched by the incremental path above, so grab just their
+      // bodystructure here. One-time cost per folder; no-op once populated.
+      const live = new Set(liveUids);
+      const backfillUids = fullResync ? [] : db.prepare(
+        'SELECT uid FROM messages WHERE folder_id = ? AND attachment_count IS NULL'
+      ).all(folderId).map((r) => r.uid).filter((u) => live.has(u) && cachedUids.has(u));
+      const backfill = [];
+      if (backfillUids.length) {
+        for await (const msg of client.fetch(backfillUids.join(','), { uid: true, bodyStructure: true }, { uid: true })) {
+          if (msg.bodyStructure) backfill.push({ uid: msg.uid, count: countAttachments(msg.bodyStructure) });
+        }
+      }
+      return { uidValidity, uidNext: mailbox.uidNext, fullResync, liveUids, rows, backfill };
     })
   );
 
@@ -128,6 +156,9 @@ export async function syncFolderMessages(folderId) {
       for (const m of cached) if (!live.has(m.uid)) del.run(m.id);
     }
     for (const row of result.rows) insertMessage.run(row);
+
+    const setCount = db.prepare('UPDATE messages SET attachment_count = ? WHERE folder_id = ? AND uid = ?');
+    for (const b of result.backfill) setCount.run(b.count, folderId, b.uid);
 
     const stats = db.prepare(
       'SELECT COUNT(*) AS n, MIN(date) AS first, MAX(date) AS last FROM messages WHERE folder_id = ?'

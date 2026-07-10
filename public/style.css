@@ -123,9 +123,11 @@ table.messages td {
 }
 table.messages td.check, table.messages th.check { width: 30px; max-width: none; }
 table.messages col.c-from { width: 22%; }
-table.messages col.c-subject { width: 44%; }
+table.messages col.c-subject { width: 40%; }
+table.messages col.c-attach { width: 4%; }
 table.messages col.c-date { width: 12%; }
 table.messages col.c-to { width: 22%; }
+table.messages td.attach, table.messages th.attach { text-align: right; color: var(--fg-dim); }
 tr.msg { cursor: pointer; }
 tr.msg:hover { background: var(--row-hover); }
 tr.msg.checked { background: var(--row-selected); }

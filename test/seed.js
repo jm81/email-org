@@ -42,6 +42,33 @@ function multipart({ from, subject, date, text, html }) {
   ].join('\r\n');
 }
 
+function withAttachments({ from, subject, date, text, filenames }) {
+  const b = 'BOUNDARY43';
+  const parts = filenames.map((name) => [
+    `--${b}`,
+    'Content-Type: application/octet-stream',
+    `Content-Disposition: attachment; filename="${name}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(`contents of ${name}`).toString('base64'),
+  ].join('\r\n'));
+  return [
+    `From: ${from}`,
+    'To: alice@test',
+    `Subject: ${subject}`,
+    `Date: ${new Date(date).toUTCString()}`,
+    `Content-Type: multipart/mixed; boundary="${b}"`,
+    '',
+    `--${b}`,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    text,
+    ...parts,
+    `--${b}--`,
+    '',
+  ].join('\r\n');
+}
+
 async function withClient(auth, fn) {
   const client = new ImapFlow({ ...IMAP, auth, logger: false });
   await client.connect();
@@ -95,6 +122,10 @@ export async function seed() {
       text: 'Plain part line one.\nPlain part line two.\nLine three.\nLine four.\nLine five.\nLine six.\nLine seven.',
       html: '<p>HTML part</p>',
     }), [], new Date('2024-01-01T00:00:00Z'));
+    await c.append('Bodies', withAttachments({
+      from: 'attach@test', subject: 'mail with attachments', date: '2024-01-03T00:00:00Z',
+      text: 'See attached.', filenames: ['report.pdf', 'data.csv'],
+    }), [], new Date('2024-01-03T00:00:00Z'));
     await c.append('Bodies', rfc822({
       from: 'htmlonly@test', subject: 'html only mail', date: '2024-01-02T00:00:00Z',
       body: '<html><body><p>Only <b>HTML</b> content here</p></body></html>',

@@ -6,6 +6,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ImapFlow } from 'imapflow';
+import Database from 'better-sqlite3';
 import { seed, IMAP, ALICE } from './seed.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -120,6 +121,33 @@ describe('email-org integration', () => {
     const htmlOnly = messages.find((m) => m.subject === 'html only mail');
     const htmlBody = await api('GET', `/api/messages/${htmlOnly.id}/body?mode=full`);
     assert.ok(htmlBody.text.includes('Only HTML content here'), `got: ${htmlBody.text}`);
+  });
+
+  test('header sync counts attachments', async () => {
+    const bodies = await folderByPath(alice.id, 'Bodies');
+    await api('POST', `/api/folders/${bodies.id}/sync`);
+    const { messages } = await api('GET', `/api/folders/${bodies.id}/messages`);
+
+    const attached = messages.find((m) => m.subject === 'mail with attachments');
+    assert.equal(attached.attachment_count, 2);
+    // multipart/alternative bodies are content, not attachments
+    const multi = messages.find((m) => m.subject === 'multipart mail');
+    assert.equal(multi.attachment_count, 0);
+  });
+
+  test('resync backfills attachment counts on rows cached without them', async () => {
+    const bodies = await folderByPath(alice.id, 'Bodies');
+    await api('POST', `/api/folders/${bodies.id}/sync`);
+
+    // Simulate rows cached before the attachment_count column existed.
+    const testDb = new Database(join(here, 'tmp', 'data', 'app.db'));
+    testDb.prepare('UPDATE messages SET attachment_count = NULL WHERE folder_id = ?').run(bodies.id);
+    testDb.close();
+
+    await api('POST', `/api/folders/${bodies.id}/sync`);
+    const { messages } = await api('GET', `/api/folders/${bodies.id}/messages`);
+    assert.equal(messages.find((m) => m.subject === 'mail with attachments').attachment_count, 2);
+    assert.equal(messages.find((m) => m.subject === 'multipart mail').attachment_count, 0);
   });
 
   test('create and delete a subfolder', async () => {

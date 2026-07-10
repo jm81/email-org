@@ -11,3 +11,9 @@ export const db = new Database(join(dataDir, 'app.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.exec(readFileSync(join(here, 'schema.sql'), 'utf8'));
+
+// Additive migrations for databases created before a column existed.
+const messageCols = new Set(db.prepare('PRAGMA table_info(messages)').all().map((c) => c.name));
+if (!messageCols.has('attachment_count')) {
+  db.exec('ALTER TABLE messages ADD COLUMN attachment_count INTEGER');
+}
