@@ -164,7 +164,7 @@ tr.msg-body td .body-full { max-height: 60vh; overflow-y: auto; display: block; 
 
 /* ---------- folder picker ---------- */
 #folder-picker {
-  position: fixed; z-index: 30; width: 340px; max-height: 50vh;
+  position: fixed; z-index: 30; width: 520px; max-width: 90vw; max-height: 50vh;
   display: flex; flex-direction: column;
   background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0,0,0,.3); padding: 8px;

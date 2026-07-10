@@ -24,7 +24,7 @@ export function showFolderPicker({ accounts, foldersByAccount, excludeFolderId }
   document.body.appendChild(pickerEl);
 
   // Centered near the top so it works from both the batch bar and context menu.
-  pickerEl.style.left = (window.innerWidth - 340) / 2 + 'px';
+  pickerEl.style.left = (window.innerWidth - pickerEl.offsetWidth) / 2 + 'px';
   pickerEl.style.top = '90px';
 
   let active = 0;
