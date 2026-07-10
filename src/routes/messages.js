@@ -1,9 +1,33 @@
 import { Router } from 'express';
-import { fetchBodyText } from '../imap/body.js';
+import { fetchBodyText, fetchFullMessage } from '../imap/body.js';
+import { renderMessageView } from '../message-view.js';
 import { deleteMessages, moveMessages } from '../imap/ops.js';
 import { startJob } from '../jobs.js';
 
 export const router = Router();
+
+// Standalone full-message page (opened in a new tab). The CSP allows
+// images/styles/fonts but no scripts, fetch, or frames beyond the inline
+// srcdoc body — the message markup is untrusted.
+router.get('/:id/view', async (req, res) => {
+  const { row, parsed } = await fetchFullMessage(Number(req.params.id));
+  res.set('Content-Security-Policy',
+    "default-src 'none'; img-src data: http: https:; style-src 'unsafe-inline' http: https:; font-src data: http: https:; frame-src data: about:");
+  res.type('html').send(renderMessageView(parsed, row));
+});
+
+// Downloads one attachment, addressed by its index in the parsed message
+// (the view page links carry the same index). Always served as a download —
+// never rendered — since attachment content is untrusted.
+router.get('/:id/attachment/:index', async (req, res) => {
+  const { parsed } = await fetchFullMessage(Number(req.params.id));
+  const att = (parsed.attachments ?? [])[Number(req.params.index)];
+  if (!att) return res.status(404).json({ error: 'No such attachment' });
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.attachment(att.filename || `attachment-${req.params.index}`);
+  if (att.contentType) res.type(att.contentType);
+  res.send(att.content);
+});
 
 router.get('/:id/body', async (req, res) => {
   const body = await fetchBodyText(Number(req.params.id));

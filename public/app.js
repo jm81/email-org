@@ -376,6 +376,8 @@ const messageHandlers = {
     const subject = msg.subject || '(no subject)';
     const label = `"${subject.length > 60 ? subject.slice(0, 59) + '…' : subject}"`;
     const items = [
+      { label: 'Open full message', action: () => window.open(`/api/messages/${msg.id}/view`, '_blank') },
+      '-',
       { label: 'Move to…', action: () => pickMoveTarget(ids, label, { confirm: false }) },
     ];
     if (state.lastMoveTarget && getFolderById(state.lastMoveTarget.id)) {

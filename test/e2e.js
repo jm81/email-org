@@ -91,7 +91,28 @@ await page.evaluate(() =>
 await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 3, { timeout: 15000 });
 ok('message context menu deletes a single message');
 
-// 9. Context menu on folder (right-click)
+// 9. Open full message: new tab with headers + body in a sandboxed iframe
+const viewTargetPromise = browser.waitForTarget((t) => t.url().includes('/view'), { timeout: 10000 });
+await page.evaluate(() =>
+  document.querySelector('tr.msg').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 })));
+await page.waitForSelector('#context-menu:not([hidden])', { timeout: 3000 });
+await page.evaluate(() =>
+  [...document.querySelectorAll('#context-menu .item')].find((i) => i.textContent === 'Open full message').click());
+const viewPage = await (await viewTargetPromise).page();
+await viewPage.waitForSelector('iframe[sandbox]', { timeout: 10000 });
+const viewHeader = await viewPage.$eval('header', (e) => e.textContent);
+if (!viewHeader.includes('inbox-5 recent')) fail(`view header missing subject: ${viewHeader}`);
+let bodyText = '';
+for (let i = 0; i < 40 && !bodyText.includes('Body of inbox-5 recent'); i++) {
+  const frame = viewPage.frames().find((f) => f.url() === 'about:srcdoc');
+  if (frame) bodyText = await frame.evaluate(() => document.body?.textContent ?? '').catch(() => '');
+  if (!bodyText.includes('Body of inbox-5 recent')) await new Promise((r) => setTimeout(r, 250));
+}
+if (!bodyText.includes('Body of inbox-5 recent')) fail(`view body iframe text: ${bodyText}`);
+await viewPage.close();
+ok('Open full message renders headers + body in a new tab');
+
+// 10. Context menu on folder (right-click)
 await page.evaluate(() => {
   const row = [...document.querySelectorAll('.folder-row')].find((r) => r.querySelector('.folder-name').textContent === 'Archive');
   row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 200, clientY: 200 }));
@@ -102,7 +123,7 @@ if (!menuItems.some((t) => t.includes('Add subfolder'))) fail(`menu items: ${men
 if (!menuItems.some((t) => t.includes('Flatten'))) fail(`menu missing flatten: ${menuItems}`);
 ok(`context menu shows: ${menuItems.join(' | ')}`);
 
-// 10. Go to… picker jumps to a folder and expands the tree down to it
+// 11. Go to… picker jumps to a folder and expands the tree down to it
 await page.keyboard.press('Escape'); // close the folder context menu
 await page.click('#btn-goto');
 await page.waitForSelector('#folder-picker input', { timeout: 3000 });
@@ -116,7 +137,7 @@ if (selectedName !== 'Q1') fail(`expected Q1 selected in tree, got: ${selectedNa
 await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 3, { timeout: 15000 });
 ok('Go to… opens the folder and expands the tree to it');
 
-// 11. Quiet-folder filter hides recently-active folders
+// 12. Quiet-folder filter hides recently-active folders
 await page.keyboard.press('Escape');
 await page.click('#filter-quiet');
 await page.waitForFunction(() =>

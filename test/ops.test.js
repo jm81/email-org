@@ -123,6 +123,49 @@ describe('email-org integration', () => {
     assert.ok(htmlBody.text.includes('Only HTML content here'), `got: ${htmlBody.text}`);
   });
 
+  test('full message view: standalone page, html body in sandboxed srcdoc', async () => {
+    const bodies = await folderByPath(alice.id, 'Bodies');
+    await api('POST', `/api/folders/${bodies.id}/sync`);
+    const { messages } = await api('GET', `/api/folders/${bodies.id}/messages`);
+
+    const htmlOnly = messages.find((m) => m.subject === 'html only mail');
+    const res = await fetch(`${BASE}/api/messages/${htmlOnly.id}/view`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /text\/html/);
+    assert.ok(res.headers.get('content-security-policy').includes("default-src 'none'"));
+    const page = await res.text();
+    assert.ok(page.includes('html only mail'), 'subject in header block');
+    assert.ok(page.includes('htmlonly@test'), 'from address in header block');
+    assert.ok(page.includes('sandbox='), 'body iframe is sandboxed');
+    // The html part is attribute-escaped into the iframe srcdoc.
+    assert.ok(page.includes('Only &lt;b&gt;HTML&lt;/b&gt; content here'), `srcdoc missing body html`);
+
+    // multipart/alternative: the html part wins over the text part
+    const multi = messages.find((m) => m.subject === 'multipart mail');
+    const multiPage = await (await fetch(`${BASE}/api/messages/${multi.id}/view`)).text();
+    assert.ok(multiPage.includes('&lt;p&gt;HTML part&lt;/p&gt;'), 'html part preferred');
+  });
+
+  test('attachment download via the view page links', async () => {
+    const bodies = await folderByPath(alice.id, 'Bodies');
+    await api('POST', `/api/folders/${bodies.id}/sync`);
+    const { messages } = await api('GET', `/api/folders/${bodies.id}/messages`);
+    const attached = messages.find((m) => m.subject === 'mail with attachments');
+
+    const page = await (await fetch(`${BASE}/api/messages/${attached.id}/view`)).text();
+    const hrefs = [...page.matchAll(/href="(\/api\/messages\/\d+\/attachment\/\d+)"/g)].map((m) => m[1]);
+    assert.equal(hrefs.length, 2, `expected 2 attachment links, page has: ${hrefs}`);
+    assert.ok(page.includes('report.pdf') && page.includes('data.csv'));
+
+    const res = await fetch(BASE + hrefs[0]);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-disposition'), /attachment; filename="report.pdf"/);
+    assert.equal(await res.text(), 'contents of report.pdf');
+
+    const missing = await fetch(`${BASE}/api/messages/${attached.id}/attachment/9`);
+    assert.equal(missing.status, 404);
+  });
+
   test('header sync counts attachments', async () => {
     const bodies = await folderByPath(alice.id, 'Bodies');
     await api('POST', `/api/folders/${bodies.id}/sync`);

@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import * as pool from './pool.js';
 import { getFolder } from './sync.js';
 
-export async function fetchBodyText(messageId) {
+async function fetchSource(messageId) {
   const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
   if (!row) throw new Error(`Message ${messageId} not in cache; resync needed`);
   const folder = getFolder(row.folder_id);
@@ -18,7 +18,11 @@ export async function fetchBodyText(messageId) {
     })
   );
   if (!source) throw new Error('Message no longer on server');
+  return { row, source };
+}
 
+export async function fetchBodyText(messageId) {
+  const { row, source } = await fetchSource(messageId);
   const parsed = await simpleParser(source, { skipImageLinks: true });
   // Prefer real plain text; fall back to mailparser's HTML-derived text.
   const text = (parsed.text ?? '').trim() || (parsed.html ? htmlFallback(parsed) : '');
@@ -29,6 +33,14 @@ export async function fetchBodyText(messageId) {
     date: parsed.date?.toISOString() ?? row.date,
     text: text || '(no text content)',
   };
+}
+
+// Full parse for the standalone message view: keeps the HTML part, inline
+// images (attachment content buffers), and all headers.
+export async function fetchFullMessage(messageId) {
+  const { row, source } = await fetchSource(messageId);
+  const parsed = await simpleParser(source);
+  return { row, parsed };
 }
 
 function htmlFallback(parsed) {
