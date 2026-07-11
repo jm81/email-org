@@ -1,6 +1,6 @@
 import { db } from '../db.js';
 import * as pool from './pool.js';
-import { getFolder, syncFolderList, syncFolderMessages } from './sync.js';
+import { getFolder, syncFolderList, syncFolderMessages, upsertListedFolder } from './sync.js';
 
 // Opens the mailbox and verifies its UIDVALIDITY still matches what our cache
 // was built against. Every destructive op goes through this — a mismatch means
@@ -59,8 +59,19 @@ export async function createFolder(accountId, parentPath, name) {
       return prefix + name.trim();
     });
   }
-  await pool.run(accountId, (client) => client.mailboxCreate(path));
-  await syncFolderList(accountId);
+  // Cache just the new mailbox from a plain LIST (see renameFolder for why
+  // not syncFolderList). LIST also supplies the authoritative delimiter,
+  // flags, and any namespace-prefixed final path.
+  const box = await pool.run(accountId, async (client) => {
+    await client.mailboxCreate(path);
+    const listing = await client.list();
+    return listing.find((b) => b.path === path);
+  });
+  if (!box) throw new Error(`Create verification failed: "${path}" not on server after CREATE`);
+  upsertListedFolder(accountId, box);
+  // A freshly created mailbox is empty; don't leave the counts unknown.
+  db.prepare('UPDATE folders SET msg_count = 0, unseen_count = 0 WHERE account_id = ? AND path = ?')
+    .run(accountId, path);
   return db.prepare('SELECT * FROM folders WHERE account_id = ? AND path = ?').get(accountId, path);
 }
 

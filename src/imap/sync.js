@@ -15,6 +15,27 @@ const upsertFolder = db.prepare(`
     uidvalidity=COALESCE(excluded.uidvalidity, uidvalidity)
 `);
 
+// Upsert one LIST result row (box.status is optional — plain LIST callers
+// leave the counts alone thanks to the COALESCEs above).
+export function upsertListedFolder(accountId, box) {
+  const delimiter = box.delimiter || '/';
+  const idx = box.path.lastIndexOf(delimiter);
+  upsertFolder.run({
+    account_id: accountId,
+    path: box.path,
+    name: box.name ?? (idx >= 0 ? box.path.slice(idx + delimiter.length) : box.path),
+    parent_path: idx > 0 ? box.path.slice(0, idx) : null,
+    delimiter: box.delimiter ?? null,
+    selectable: box.flags?.has('\\Noselect') ? 0 : 1,
+    no_inferiors: box.flags?.has('\\Noinferiors') ? 1 : 0,
+    special_use: box.specialUse ?? null,
+    uidvalidity: box.status?.uidValidity != null ? Number(box.status.uidValidity) : null,
+    uidnext: box.status?.uidNext ?? null,
+    msg_count: box.status?.messages ?? null,
+    unseen_count: box.status?.unseen ?? null,
+  });
+}
+
 export async function syncFolderList(accountId) {
   const listing = await pool.run(accountId, (client) =>
     client.list({ statusQuery: { messages: true, unseen: true, uidNext: true, uidValidity: true } })
@@ -24,22 +45,7 @@ export async function syncFolderList(accountId) {
     const seen = new Set();
     for (const box of listing) {
       seen.add(box.path);
-      const delimiter = box.delimiter || '/';
-      const idx = box.path.lastIndexOf(delimiter);
-      upsertFolder.run({
-        account_id: accountId,
-        path: box.path,
-        name: box.name ?? (idx >= 0 ? box.path.slice(idx + delimiter.length) : box.path),
-        parent_path: idx > 0 ? box.path.slice(0, idx) : null,
-        delimiter: box.delimiter ?? null,
-        selectable: box.flags?.has('\\Noselect') ? 0 : 1,
-        no_inferiors: box.flags?.has('\\Noinferiors') ? 1 : 0,
-        special_use: box.specialUse ?? null,
-        uidvalidity: box.status?.uidValidity != null ? Number(box.status.uidValidity) : null,
-        uidnext: box.status?.uidNext ?? null,
-        msg_count: box.status?.messages ?? null,
-        unseen_count: box.status?.unseen ?? null,
-      });
+      upsertListedFolder(accountId, box);
     }
     // Remove folders no longer on the server (cascades cached messages).
     const cached = db.prepare('SELECT id, path FROM folders WHERE account_id = ?').all(accountId);
