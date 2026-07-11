@@ -16,6 +16,8 @@ const state = {
   expandedBodies: new Map(), // msgId -> {mode, body, loading}
   filters: { quietMonths: null, done: 'all', doneBefore: null },
   inlineAdd: null,           // {accountId, parentPath}
+  inlineRename: null,        // folderId
+  inlineRenameDraft: null,   // text typed so far (survives mid-edit redraws)
   lastMoveTarget: null,      // folder row
 };
 
@@ -246,6 +248,13 @@ const treeHandlers = {
         redrawTree();
       } });
     }
+    if (!folder.special_use && folder.path.toUpperCase() !== 'INBOX') {
+      items.push({ label: 'Rename', action: () => {
+        state.inlineRename = folder.id;
+        state.inlineRenameDraft = null;
+        redrawTree();
+      } });
+    }
     if (folder.selectable) {
       items.push({ label: 'Sync folder', action: () => guard(async () => {
         await api.syncFolder(folder.id);
@@ -306,6 +315,30 @@ const treeHandlers = {
         await loadEverything();
       } },
     ]);
+  },
+  onInlineRenameDraft: (value) => { state.inlineRenameDraft = value; },
+  onInlineRenameFinish: (result) => {
+    state.inlineRename = null;
+    state.inlineRenameDraft = null;
+    redrawTree();
+    if (!result) return;
+    guard(async () => {
+      const renamed = await api.renameFolder(result.folder.id, result.name);
+      // Rewrite expansion keys under the old path so the subtree stays open.
+      const delim = renamed.delimiter || '/';
+      const oldKey = `${renamed.account_id}:${result.folder.path}`;
+      const newKey = `${renamed.account_id}:${renamed.path}`;
+      for (const key of [...state.expanded]) {
+        if (key === oldKey || key.startsWith(oldKey + delim)) {
+          state.expanded.delete(key);
+          state.expanded.add(newKey + key.slice(oldKey.length));
+        }
+      }
+      localStorage.setItem('expanded', JSON.stringify([...state.expanded]));
+      await reloadFolders(renamed.account_id);
+      redrawTree();
+      redrawMessages(); // folder header shows the path
+    });
   },
   onInlineAddFinish: (result) => {
     state.inlineAdd = null;
@@ -377,6 +410,7 @@ const messageHandlers = {
     const label = `"${subject.length > 60 ? subject.slice(0, 59) + '…' : subject}"`;
     const items = [
       { label: 'Open full message', action: () => window.open(`/api/messages/${msg.id}/view`, '_blank') },
+      { label: 'Show source', action: () => window.open(`/api/messages/${msg.id}/source`, '_blank') },
       '-',
       { label: 'Move to…', action: () => pickMoveTarget(ids, label, { confirm: false }) },
     ];

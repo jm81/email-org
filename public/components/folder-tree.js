@@ -106,9 +106,14 @@ function renderNode(node, account, state, handlers, visible, filterActive) {
   twisty.textContent = node.children.length ? (expanded ? '▾' : '▸') : '';
   twisty.addEventListener('click', (e) => { e.stopPropagation(); handlers.onToggle(key); });
 
-  const name = document.createElement('span');
-  name.className = 'folder-name';
-  name.textContent = f.name;
+  let name;
+  if (state.inlineRename === f.id) {
+    name = renameInput(f, state, handlers);
+  } else {
+    name = document.createElement('span');
+    name.className = 'folder-name';
+    name.textContent = f.name;
+  }
 
   row.append(twisty, name);
 
@@ -168,6 +173,34 @@ function renderNode(node, account, state, handlers, visible, filterActive) {
     li.appendChild(ul);
   }
   return li;
+}
+
+function renameInput(f, state, handlers) {
+  const input = document.createElement('input');
+  input.className = 'inline-input';
+  const fresh = state.inlineRenameDraft == null;
+  input.value = state.inlineRenameDraft ?? f.name;
+  let doneAlready = false;
+  const finish = (commit) => {
+    if (doneAlready) return;
+    doneAlready = true;
+    const name = input.value.trim();
+    handlers.onInlineRenameFinish(commit && name && name !== f.name ? { folder: f, name } : null);
+  };
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('input', () => handlers.onInlineRenameDraft(input.value));
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') finish(true);
+    if (e.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => {
+    // A redraw mid-edit replaces this input with a fresh copy carrying the
+    // draft; only a real click-away (still in the DOM) cancels.
+    if (input.isConnected) finish(false);
+  });
+  setTimeout(() => { input.focus(); if (fresh) input.select(); }, 0);
+  return input;
 }
 
 function inlineAddInput(accountId, parentPath, handlers) {

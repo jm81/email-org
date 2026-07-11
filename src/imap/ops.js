@@ -50,18 +50,66 @@ export async function createFolder(accountId, parentPath, name) {
     if (name.includes(delim)) throw new Error(`Folder name may not contain "${delim}"`);
     path = parent.path + delim + name.trim();
   } else {
-    // Some servers root personal folders under a namespace prefix (e.g. "INBOX.").
+    // Some servers root personal folders under a namespace prefix (e.g.
+    // "INBOX."). client.namespace (primary personal) is populated at connect.
     path = await pool.run(accountId, async (client) => {
-      const ns = await client.namespaces();
-      const prefix = ns?.personal?.[0]?.prefix ?? '';
-      const delim = ns?.personal?.[0]?.delimiter ?? '/';
-      if (prefix && name.includes(delim)) throw new Error(`Folder name may not contain "${delim}"`);
+      const prefix = client.namespace?.prefix ?? '';
+      const delim = client.namespace?.delimiter ?? '/';
+      if (name.includes(delim)) throw new Error(`Folder name may not contain "${delim}"`);
       return prefix + name.trim();
     });
   }
   await pool.run(accountId, (client) => client.mailboxCreate(path));
   await syncFolderList(accountId);
   return db.prepare('SELECT * FROM folders WHERE account_id = ? AND path = ?').get(accountId, path);
+}
+
+// Renames the folder in place (same parent). IMAP RENAME carries the whole
+// subtree with it, so cached paths are rewritten rather than resynced from
+// scratch — folder ids stay stable, which keeps cached messages and done
+// marks attached. UIDVALIDITY is usually preserved by servers across a
+// rename; if one doesn't, the next sync's UIDVALIDITY check catches it.
+export async function renameFolder(folderId, newName) {
+  const folder = getFolder(folderId);
+  if (!folder) throw new Error(`No such folder: ${folderId}`);
+  if (folder.special_use) throw new Error(`Refusing to rename special folder ${folder.path} (${folder.special_use})`);
+  if (folder.path.toUpperCase() === 'INBOX') throw new Error('Refusing to rename INBOX');
+  const name = newName?.trim();
+  if (!name) throw new Error('Folder name required');
+  const delim = folder.delimiter || '/';
+  if (name.includes(delim)) throw new Error(`Folder name may not contain "${delim}"`);
+  if (name === folder.name) return folder;
+  const newPath = folder.parent_path ? folder.parent_path + delim + name : name;
+  if (db.prepare('SELECT 1 FROM folders WHERE account_id = ? AND path = ?').get(folder.account_id, newPath)) {
+    throw new Error(`Folder "${newPath}" already exists`);
+  }
+
+  await pool.run(folder.account_id, async (client) => {
+    await client.mailboxRename(folder.path, newPath);
+    // Verify with a plain LIST — one round trip. (Not syncFolderList: its
+    // per-folder STATUS fallback on servers without LIST-STATUS can take
+    // minutes on large accounts, and the caller is a UI action awaiting us.)
+    const listing = await client.list();
+    if (!listing.some((box) => box.path === newPath)) {
+      throw new Error(`Rename verification failed: "${newPath}" not on server after RENAME`);
+    }
+  });
+
+  db.transaction(() => {
+    const prefix = folder.path + delim;
+    const rows = db.prepare('SELECT id, path, parent_path, name FROM folders WHERE account_id = ?').all(folder.account_id);
+    const upd = db.prepare('UPDATE folders SET path = ?, parent_path = ?, name = ? WHERE id = ?');
+    for (const r of rows) {
+      if (r.id === folder.id) {
+        upd.run(newPath, folder.parent_path, name, r.id);
+      } else if (r.path.startsWith(prefix)) {
+        upd.run(newPath + r.path.slice(folder.path.length),
+          newPath + r.parent_path.slice(folder.path.length), r.name, r.id);
+      }
+    }
+  })();
+
+  return getFolder(folder.id);
 }
 
 export async function deleteFolder(folderId, { force = false } = {}) {

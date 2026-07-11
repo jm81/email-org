@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { fetchBodyText, fetchFullMessage } from '../imap/body.js';
+import { fetchBodyText, fetchFullMessage, fetchRawSource } from '../imap/body.js';
 import { renderMessageView } from '../message-view.js';
 import { deleteMessages, moveMessages } from '../imap/ops.js';
 import { startJob } from '../jobs.js';
@@ -14,6 +14,14 @@ router.get('/:id/view', async (req, res) => {
   res.set('Content-Security-Policy',
     "default-src 'none'; img-src data: http: https:; style-src 'unsafe-inline' http: https:; font-src data: http: https:; frame-src data: about:");
   res.type('html').send(renderMessageView(parsed, row));
+});
+
+// Raw RFC822 source as plain text (opened in a new tab).
+router.get('/:id/source', async (req, res) => {
+  const source = await fetchRawSource(Number(req.params.id));
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Security-Policy', "default-src 'none'");
+  res.type('text/plain; charset=utf-8').send(source);
 });
 
 // Downloads one attachment, addressed by its index in the parsed message

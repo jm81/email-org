@@ -137,7 +137,23 @@ if (selectedName !== 'Q1') fail(`expected Q1 selected in tree, got: ${selectedNa
 await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 3, { timeout: 15000 });
 ok('Go to… opens the folder and expands the tree to it');
 
-// 12. Quiet-folder filter hides recently-active folders
+// 12. Rename a folder via the context menu's inline input
+await page.evaluate(() => {
+  const row = [...document.querySelectorAll('.folder-row')].find((r) => r.querySelector('.folder-name')?.textContent === 'Doomed');
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 200, clientY: 200 }));
+});
+await page.waitForSelector('#context-menu:not([hidden])', { timeout: 3000 });
+await page.evaluate(() =>
+  [...document.querySelectorAll('#context-menu .item')].find((i) => i.textContent === 'Rename').click());
+await page.waitForSelector('.folder-row input.inline-input', { timeout: 3000 });
+await page.evaluate(() => { document.querySelector('.folder-row input.inline-input').value = ''; });
+await page.type('.folder-row input.inline-input', 'Doomed2');
+await page.keyboard.press('Enter');
+await page.waitForFunction(() =>
+  [...document.querySelectorAll('.folder-name')].some((e) => e.textContent === 'Doomed2'), { timeout: 10000 });
+ok('folder rename via context menu inline input');
+
+// 13. Quiet-folder filter hides recently-active folders
 await page.keyboard.press('Escape');
 await page.click('#filter-quiet');
 await page.waitForFunction(() =>

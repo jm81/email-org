@@ -35,6 +35,12 @@ export async function fetchBodyText(messageId) {
   };
 }
 
+// Raw RFC822 source, unparsed (the "Show source" tab).
+export async function fetchRawSource(messageId) {
+  const { source } = await fetchSource(messageId);
+  return source;
+}
+
 // Full parse for the standalone message view: keeps the HTML part, inline
 // images (attachment content buffers), and all headers.
 export async function fetchFullMessage(messageId) {

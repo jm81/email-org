@@ -20,6 +20,7 @@ export const api = {
   folders: (id) => req('GET', `/api/accounts/${id}/folders`),
   createFolder: (b) => req('POST', '/api/folders', b),
   deleteFolder: (id, force) => req('DELETE', `/api/folders/${id}${force ? '?force=1' : ''}`),
+  renameFolder: (id, name) => req('POST', `/api/folders/${id}/rename`, { name }),
   syncFolder: (id) => req('POST', `/api/folders/${id}/sync`),
   flatten: (id) => req('POST', `/api/folders/${id}/flatten`),
   setDone: (id, done) => req('POST', `/api/folders/${id}/done`, { done }),

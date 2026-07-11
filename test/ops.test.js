@@ -144,6 +144,14 @@ describe('email-org integration', () => {
     const multi = messages.find((m) => m.subject === 'multipart mail');
     const multiPage = await (await fetch(`${BASE}/api/messages/${multi.id}/view`)).text();
     assert.ok(multiPage.includes('&lt;p&gt;HTML part&lt;/p&gt;'), 'html part preferred');
+
+    // raw source: unparsed rfc822 as plain text
+    const src = await fetch(`${BASE}/api/messages/${htmlOnly.id}/source`);
+    assert.equal(src.status, 200);
+    assert.match(src.headers.get('content-type'), /text\/plain/);
+    const raw = await src.text();
+    assert.ok(raw.includes('Subject: html only mail'), 'raw headers present');
+    assert.ok(raw.includes('<p>Only <b>HTML</b> content here</p>'), 'raw body unescaped');
   });
 
   test('attachment download via the view page links', async () => {
@@ -164,6 +172,43 @@ describe('email-org integration', () => {
 
     const missing = await fetch(`${BASE}/api/messages/${attached.id}/attachment/9`);
     assert.equal(missing.status, 404);
+  });
+
+  test('rename folder: subtree rewritten in place, cache and done marks survive', async () => {
+    const parent = await api('POST', '/api/folders', { accountId: alice.id, name: 'Renamable' });
+    const child = await api('POST', '/api/folders', { accountId: alice.id, parentPath: 'Renamable', name: 'Kid' });
+
+    const c = new ImapFlow({ ...IMAP, auth: ALICE, logger: false });
+    await c.connect();
+    await c.append('Renamable.Kid', 'From: x@y\r\nSubject: survives rename\r\n\r\nhello from kid\r\n');
+    await c.logout();
+
+    await api('POST', `/api/folders/${child.id}/sync`);
+    const before = (await api('GET', `/api/folders/${child.id}/messages`)).messages;
+    assert.equal(before.length, 1);
+    await api('POST', `/api/folders/${child.id}/done`, { done: true });
+
+    const renamed = await api('POST', `/api/folders/${parent.id}/rename`, { name: 'Renamed' });
+    assert.equal(renamed.path, 'Renamed');
+    assert.equal(renamed.id, parent.id, 'folder id stable across rename');
+
+    const folders = await api('GET', `/api/accounts/${alice.id}/folders`);
+    const kid = folders.find((f) => f.path === 'Renamed.Kid');
+    assert.ok(kid, 'child path rewritten');
+    assert.equal(kid.id, child.id, 'child folder id stable');
+    assert.ok(kid.done_at, 'done mark survives');
+    assert.ok(!folders.some((f) => f.path === 'Renamable' || f.path.startsWith('Renamable.')), 'old paths gone');
+
+    const after = (await api('GET', `/api/folders/${child.id}/messages`)).messages;
+    assert.equal(after.length, 1);
+    assert.equal(after[0].id, before[0].id, 'cached message row survives');
+
+    // And the message is really at the new path on the server.
+    const body = await api('GET', `/api/messages/${after[0].id}/body?mode=full`);
+    assert.ok(body.text.includes('hello from kid'));
+
+    const inbox = folders.find((f) => f.path === 'INBOX');
+    await assert.rejects(api('POST', `/api/folders/${inbox.id}/rename`, { name: 'NotInbox' }), /INBOX/);
   });
 
   test('header sync counts attachments', async () => {

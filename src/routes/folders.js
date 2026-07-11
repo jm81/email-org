@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { getFolder, syncFolderMessages } from '../imap/sync.js';
-import { createFolder, deleteFolder, flattenFolder } from '../imap/ops.js';
+import { createFolder, deleteFolder, flattenFolder, renameFolder } from '../imap/ops.js';
 import { startJob } from '../jobs.js';
 
 export const router = Router();
@@ -15,6 +15,11 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   await deleteFolder(Number(req.params.id), { force: req.query.force === '1' });
   res.status(204).end();
+});
+
+router.post('/:id/rename', async (req, res) => {
+  if (!req.body.name) return res.status(400).json({ error: 'name is required' });
+  res.json(await renameFolder(Number(req.params.id), req.body.name));
 });
 
 router.post('/:id/sync', async (req, res) => {
