@@ -2,6 +2,13 @@
 // expansion: click a row to preview (~4 lines), double-click for full text,
 // click again to collapse.
 
+// flags is a JSON array string from the cache (e.g. '["\\Seen"]'). Rows with
+// no flags data are treated as read — better to under-bold than mislabel.
+function isUnread(msg) {
+  if (msg.flags == null) return false;
+  try { return !JSON.parse(msg.flags).includes('\\Seen'); } catch { return false; }
+}
+
 function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -35,6 +42,7 @@ export function renderMessages(container, state, handlers) {
     const tr = document.createElement('tr');
     tr.className = 'msg' + (state.selection.has(msg.id) ? ' checked' : '');
     tr.dataset.id = msg.id;
+    if (isUnread(msg)) tr.classList.add('unread');
 
     const tdCheck = document.createElement('td');
     tdCheck.className = 'check';

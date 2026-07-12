@@ -131,6 +131,7 @@ table.messages col.c-date { width: 12%; }
 table.messages col.c-to { width: 22%; }
 table.messages td.attach, table.messages th.attach { text-align: right; color: var(--fg-dim); }
 tr.msg { cursor: pointer; }
+tr.msg.unread td { font-weight: 600; }
 tr.msg:hover { background: var(--row-hover); }
 tr.msg.redundant { background: var(--row-redundant); }
 tr.msg.checked { background: var(--row-selected); }
