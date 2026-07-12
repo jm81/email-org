@@ -14,6 +14,7 @@ const state = {
   selection: new Set(),
   lastCheckedIndex: null,
   expandedBodies: new Map(), // msgId -> {mode, body, loading}
+  redundant: null,           // {folderId, byId: Map(msgId -> containedInId), scanned}
   filters: { quietMonths: null, done: 'all', doneBefore: null },
   inlineAdd: null,           // {accountId, parentPath}
   inlineRename: null,        // folderId
@@ -90,37 +91,60 @@ function redrawBatchBar() {
   const bar = $('batch-bar');
   if (bar.classList.contains('confirming')) return;
   const n = state.selection.size;
+  const red = state.redundant?.folderId === state.selectedFolderId && state.redundant.byId.size
+    ? state.redundant : null;
   bar.innerHTML = '';
-  if (!n) { bar.hidden = true; return; }
+  if (!n && !red) { bar.hidden = true; return; }
   bar.hidden = false;
 
-  const count = document.createElement('span');
-  count.className = 'count';
-  count.textContent = `${n} selected`;
+  if (n) {
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = `${n} selected`;
 
-  const move = document.createElement('button');
-  move.textContent = 'Move to…';
-  move.addEventListener('click', () => pickMoveTarget([...state.selection]));
+    const move = document.createElement('button');
+    move.textContent = 'Move to…';
+    move.addEventListener('click', () => pickMoveTarget([...state.selection]));
 
-  bar.append(count, move);
+    bar.append(count, move);
 
-  if (state.lastMoveTarget && getFolderById(state.lastMoveTarget.id)) {
-    const again = document.createElement('button');
-    again.textContent = `Move to ${state.lastMoveTarget.name}`;
-    again.addEventListener('click', () => moveMessages([...state.selection], state.lastMoveTarget));
-    bar.appendChild(again);
+    if (state.lastMoveTarget && getFolderById(state.lastMoveTarget.id)) {
+      const again = document.createElement('button');
+      again.textContent = `Move to ${state.lastMoveTarget.name}`;
+      again.addEventListener('click', () => moveMessages([...state.selection], state.lastMoveTarget));
+      bar.appendChild(again);
+    }
+
+    const del = document.createElement('button');
+    del.className = 'danger';
+    del.textContent = 'Delete';
+    del.addEventListener('click', () => deleteMessages([...state.selection]));
+
+    const clear = document.createElement('button');
+    clear.textContent = 'Clear';
+    clear.addEventListener('click', () => { state.selection.clear(); redrawMessages(); });
+
+    bar.append(del, clear);
   }
 
-  const del = document.createElement('button');
-  del.className = 'danger';
-  del.textContent = 'Delete';
-  del.addEventListener('click', () => deleteMessages([...state.selection]));
+  if (red) {
+    const loaded = state.messages.filter((m) => red.byId.has(m.id));
+    const select = document.createElement('button');
+    select.textContent = `Select ${loaded.length} redundant`;
+    select.addEventListener('click', () => {
+      for (const m of loaded) state.selection.add(m.id);
+      // Never queue messages the user can't see for deletion.
+      const unloaded = red.byId.size - loaded.length;
+      if (unloaded > 0) toast(`${unloaded} redundant message${unloaded > 1 ? 's are' : ' is'} beyond the ${state.messages.length} loaded rows and stayed unselected`, 'info');
+      redrawMessages();
+    });
 
-  const clear = document.createElement('button');
-  clear.textContent = 'Clear';
-  clear.addEventListener('click', () => { state.selection.clear(); redrawMessages(); });
+    const dismiss = document.createElement('button');
+    dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => { state.redundant = null; redrawMessages(); });
 
-  bar.append(del, clear);
+    bar.append(select, dismiss);
+  }
 }
 
 /* ---------- folder selection & sync ---------- */
@@ -130,6 +154,7 @@ async function selectFolder(folder, { forceSync = false } = {}) {
   state.expandedBodies.clear();
   state.lastCheckedIndex = null;
   state.messages = [];
+  if (state.redundant && state.redundant.folderId !== folder.id) state.redundant = null;
   redrawTree();
   redrawMessages();
   await guard(async () => {
@@ -169,10 +194,17 @@ async function afterMutation(accountIds) {
       for (const id of [...state.selection]) {
         if (!messages.some((m) => m.id === id)) state.selection.delete(id);
       }
+      if (state.redundant) {
+        for (const id of [...state.redundant.byId.keys()]) {
+          if (!messages.some((m) => m.id === id)) state.redundant.byId.delete(id);
+        }
+        if (!state.redundant.byId.size) state.redundant = null;
+      }
     } else {
       state.selectedFolderId = null;
       state.messages = [];
       state.selection.clear();
+      state.redundant = null;
     }
   }
   redrawTree();
@@ -190,6 +222,37 @@ async function runJob(startPromise, progressLabel, accountIds) {
   });
   $('batch-bar').hidden = true;
   await afterMutation(accountIds);
+}
+
+/* ---------- redundant-message scan ---------- */
+// Read-only job (unlike runJob's users): nothing to re-sync, but we need
+// job.result. Marks land in state.redundant; deletion stays with the
+// normal reviewed selection -> Delete flow.
+async function scanRedundant(folder) {
+  await guard(async () => {
+    const { jobId } = await api.scanRedundant(folder.id);
+    const job = await pollJob(jobId, (j) => showProgress(`Scanning bodies ${j.done}/${j.total || '?'}…`));
+    $('batch-bar').hidden = true;
+    if (job.errors.length) toast(job.errors.join('\n'));
+    if (!job.result) return;
+    state.redundant = {
+      folderId: folder.id,
+      byId: new Map(job.result.redundant.map((r) => [r.id, r.containedIn])),
+      scanned: job.result.scanned,
+    };
+    if (state.selectedFolderId === folder.id) {
+      // The scan re-synced the folder; reload so marks line up with fresh rows.
+      const { messages } = await api.messages(folder.id);
+      state.messages = messages;
+      await reloadFolders(folder.account_id);
+      redrawTree();
+      redrawMessages();
+    } else {
+      goToFolder(getFolderById(folder.id) ?? folder);
+    }
+    const n = state.redundant.byId.size;
+    toast(`${n} redundant message${n === 1 ? '' : 's'} of ${job.result.scanned} in "${folder.name}"`, 'info');
+  });
 }
 
 /* ---------- move/delete actions (batch bar and per-message menu) ---------- */
@@ -262,6 +325,7 @@ const treeHandlers = {
         redrawTree();
         if (folder.id === state.selectedFolderId) selectFolder(getFolderById(folder.id));
       }) });
+      items.push({ label: 'Find redundant messages', action: () => scanRedundant(folder) });
       items.push({ label: folder.done_at ? 'Clear done mark' : 'Mark done', action: () => guard(async () => {
         await api.setDone(folder.id, !folder.done_at);
         await reloadFolders(folder.account_id);

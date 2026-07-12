@@ -2,6 +2,7 @@ import { simpleParser } from 'mailparser';
 import { db } from '../db.js';
 import * as pool from './pool.js';
 import { getFolder } from './sync.js';
+import { htmlFallback } from '../redundancy.js';
 
 async function fetchSource(messageId) {
   const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(messageId);
@@ -47,11 +48,4 @@ export async function fetchFullMessage(messageId) {
   const { row, source } = await fetchSource(messageId);
   const parsed = await simpleParser(source);
   return { row, parsed };
-}
-
-function htmlFallback(parsed) {
-  // mailparser sets textAsHtml when only text exists; when only HTML exists,
-  // parsed.text is usually still derived. Last resort: strip tags crudely.
-  return String(parsed.html).replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 }

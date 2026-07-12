@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "test": "node --test test/ops.test.js",
+    "test": "node --test test/redundancy.test.js test/ops.test.js",
     "start": "node server.js",
     "e2e": "./test/run-e2e.sh"
   },

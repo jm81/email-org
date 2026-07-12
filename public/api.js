@@ -23,6 +23,7 @@ export const api = {
   renameFolder: (id, name) => req('POST', `/api/folders/${id}/rename`, { name }),
   syncFolder: (id) => req('POST', `/api/folders/${id}/sync`),
   flatten: (id) => req('POST', `/api/folders/${id}/flatten`),
+  scanRedundant: (id) => req('POST', `/api/folders/${id}/scan-redundant`),
   setDone: (id, done) => req('POST', `/api/folders/${id}/done`, { done }),
   messages: (id) => req('GET', `/api/folders/${id}/messages`),
   body: (id, mode) => req('GET', `/api/messages/${id}/body?mode=${mode}`),

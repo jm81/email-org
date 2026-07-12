@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { getFolder, syncFolderMessages } from '../imap/sync.js';
 import { createFolder, deleteFolder, flattenFolder, renameFolder } from '../imap/ops.js';
+import { scanFolderRedundancy } from '../imap/redundancy.js';
 import { startJob } from '../jobs.js';
 
 export const router = Router();
@@ -30,6 +31,13 @@ router.post('/:id/flatten', (req, res) => {
   const folder = getFolder(Number(req.params.id));
   if (!folder) return res.status(404).json({ error: 'No such folder' });
   const job = startJob(`Flatten ${folder.path}`, 0, (j) => flattenFolder(folder.id, j));
+  res.status(202).json({ jobId: job.id });
+});
+
+router.post('/:id/scan-redundant', (req, res) => {
+  const folder = getFolder(Number(req.params.id));
+  if (!folder) return res.status(404).json({ error: 'No such folder' });
+  const job = startJob(`Scan ${folder.path} for redundant messages`, 0, (j) => scanFolderRedundancy(folder.id, j));
   res.status(202).json({ jobId: job.id });
 });
 

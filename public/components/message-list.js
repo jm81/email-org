@@ -59,7 +59,20 @@ export function renderMessages(container, state, handlers) {
       nAttach == null ? 'Attachment count unknown — sync this folder to fill it in'
         : nAttach > 0 ? `${nAttach} attachment${nAttach === 1 ? '' : 's'}` : 'No attachments');
     tdAttach.className = 'attach';
-    tr.append(tdCheck, mk(msg.from_addr), mk(msg.subject || '(no subject)'),
+    const tdSubject = mk(msg.subject || '(no subject)');
+    const red = state.redundant;
+    if (red && red.folderId === state.selectedFolderId && red.byId.has(msg.id)) {
+      tr.classList.add('redundant');
+      const pill = document.createElement('span');
+      pill.className = 'redundant-badge';
+      pill.textContent = 'quoted in newer';
+      const container = state.messages.find((m) => m.id === red.byId.get(msg.id));
+      pill.title = container
+        ? `Text contained in "${container.subject || '(no subject)'}" (${fmtDate(container.date)})`
+        : 'Text contained in a newer message in this folder';
+      tdSubject.appendChild(pill);
+    }
+    tr.append(tdCheck, mk(msg.from_addr), tdSubject,
       tdAttach, mk(fmtDate(msg.date)), mk(msg.to_addrs));
 
     // Click toggles preview, double-click opens full; timer disambiguates.

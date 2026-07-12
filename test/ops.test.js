@@ -318,6 +318,37 @@ describe('email-org integration', () => {
     assert.equal(flat.msg_count, 7, '1 own + 2 + 3 + 1 moved up');
   });
 
+  test('redundancy scan flags fully-quoted older messages, delete flow removes them', async () => {
+    const chains = await folderByPath(alice.id, 'Chains');
+    const { jobId } = await api('POST', `/api/folders/${chains.id}/scan-redundant`);
+    const job = await waitJob(jobId);
+    assert.equal(job.status, 'done');
+    assert.deepEqual(job.errors, []);
+    assert.equal(job.result.scanned, 8);
+
+    const { messages } = await api('GET', `/api/folders/${chains.id}/messages`);
+    const bySubject = Object.fromEntries(messages.map((m) => [m.subject, m]));
+    const byId = new Map(messages.map((m) => [m.id, m]));
+
+    // Marked: the two quoted "Project X" predecessors and the plain-text
+    // message quoted inside the HTML-only reply. Not marked: the final
+    // replies, the same-body-different-subject decoy, the too-short thread.
+    const marked = new Map(job.result.redundant.map((r) => [r.id, r.containedIn]));
+    assert.deepEqual(
+      [...marked.keys()].sort((a, b) => a - b),
+      ['Project X', 'Re: Project X', 'Numbers'].map((s) => bySubject[s].id).sort((a, b) => a - b));
+    for (const [id, containedIn] of marked) {
+      assert.ok(byId.get(containedIn).date > byId.get(id).date, 'container is strictly newer');
+    }
+
+    const del = await api('POST', '/api/messages/delete', { messageIds: [...marked.keys()] });
+    const delJob = await waitJob(del.jobId);
+    assert.equal(delJob.status, 'done');
+    const after = await api('GET', `/api/folders/${chains.id}/messages`);
+    assert.deepEqual(after.messages.map((m) => m.subject).sort(),
+      ['Quick question', 'Re: Numbers', 'Re: Quick question', 'Re: Re: Project X', 'Unrelated notes']);
+  });
+
   test('UIDVALIDITY change blocks destructive ops until resync', async () => {
     const doomed = await folderByPath(alice.id, 'Doomed');
     await api('POST', `/api/folders/${doomed.id}/sync`);

@@ -132,6 +132,46 @@ export async function seed() {
       contentType: 'text/html',
     }), [], new Date('2024-01-02T00:00:00Z'));
 
+    // Reply chains for the redundancy scan: quoted-with-mutations threads,
+    // a same-body different-subject decoy, a too-short thread, an HTML reply.
+    await c.mailboxCreate('Chains');
+    const chainBody = 'Hi team, here is the first draft of the project budget summary.\nPlease send comments by Friday afternoon so we can lock the numbers.';
+    const chains = [
+      { subject: 'Project X', date: '2025-05-12T10:00:00Z', body: chainBody },
+      { subject: 'Re: Project X', date: '2025-05-13T10:00:00Z', body: [
+        'Looks good overall, one question about the travel line item below.',
+        '',
+        'On Mon, 12 May 2025, alice@test wrote:',
+        '> Hi team, here is the first draft of the',        // re-wrapped quote
+        '> project budget summary. Please send comments',
+        '> by Friday afternoon so we can lock the numbers.',
+      ].join('\n') },
+      { subject: 'Re: Re: Project X', date: '2025-05-14T10:00:00Z', body: [
+        'Approved, thanks everyone. Closing this thread now.',
+        '',
+        'On Tue, 13 May 2025, bob@test wrote:',
+        '> Looks good overall, one question about the travel line item below.',
+        '>',
+        '> On Mon, 12 May 2025, alice@test wrote:',
+        '>> Hi team, here is the first draft of the',
+        '>> project budget summary. Please send comments',
+        '>> by Friday afternoon so we can lock the numbers.',
+      ].join('\n') },
+      // Same text under another subject: must NOT be flagged (subject grouping).
+      { subject: 'Unrelated notes', date: '2025-05-15T10:00:00Z', body: chainBody },
+      // Too short to trust: never flagged even though fully quoted.
+      { subject: 'Quick question', date: '2025-05-16T10:00:00Z', body: 'Thanks!' },
+      { subject: 'Re: Quick question', date: '2025-05-17T10:00:00Z', body: 'You are welcome!\n> Thanks!' },
+      { subject: 'Numbers', date: '2025-05-18T10:00:00Z', body: 'The totals for April are forty two thousand and the forecast for May is fifty one thousand overall.' },
+      { subject: 'Re: Numbers', date: '2025-05-19T10:00:00Z', contentType: 'text/html', body:
+        '<html><body><p>Great, thanks for pulling these together.</p><blockquote>The totals for April are forty two thousand and the forecast for May is fifty one thousand overall.</blockquote></body></html>' },
+    ];
+    for (const m of chains) {
+      await c.append('Chains',
+        rfc822({ from: 'chain@test', subject: m.subject, date: m.date, body: m.body, contentType: m.contentType }),
+        [], new Date(m.date));
+    }
+
     // Sacrificial folder for the UIDVALIDITY safety test.
     await c.mailboxCreate('Doomed');
     for (let i = 1; i <= 2; i++) {

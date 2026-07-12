@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 const jobs = new Map();
 
 export function createJob(description, total = 0) {
-  const job = { id: randomUUID(), description, status: 'running', done: 0, total, errors: [], startedAt: Date.now() };
+  const job = { id: randomUUID(), description, status: 'running', done: 0, total, errors: [], result: null, startedAt: Date.now() };
   jobs.set(job.id, job);
   return job;
 }

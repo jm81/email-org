@@ -10,6 +10,7 @@
   --border: #d9d9e0;
   --row-hover: #eef2ff;
   --row-selected: #dbeafe;
+  --row-redundant: #fef3c7;
   font-size: 14px;
 }
 @media (prefers-color-scheme: dark) {
@@ -25,6 +26,7 @@
     --border: #34343f;
     --row-hover: #23283a;
     --row-selected: #1e3a5f;
+    --row-redundant: #3a3320;
   }
 }
 
@@ -130,7 +132,13 @@ table.messages col.c-to { width: 22%; }
 table.messages td.attach, table.messages th.attach { text-align: right; color: var(--fg-dim); }
 tr.msg { cursor: pointer; }
 tr.msg:hover { background: var(--row-hover); }
+tr.msg.redundant { background: var(--row-redundant); }
 tr.msg.checked { background: var(--row-selected); }
+.redundant-badge {
+  background: var(--row-redundant); color: var(--fg-dim);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: 11px; padding: 0 6px; margin-left: 6px;
+}
 tr.msg-body td {
   white-space: pre-wrap; font-family: ui-monospace, Menlo, monospace;
   font-size: 12px; color: var(--fg); background: var(--bg-2);
