@@ -1,6 +1,6 @@
 import { api, pollJob } from './api.js';
 import { renderTree } from './components/folder-tree.js';
-import { renderMessages } from './components/message-list.js';
+import { renderMessages, PAGE_SIZE } from './components/message-list.js';
 import { showMenu } from './components/context-menu.js';
 import { confirmInBar, showProgress } from './components/confirm-bar.js';
 import { showFolderPicker } from './components/folder-picker.js';
@@ -11,6 +11,7 @@ const state = {
   expanded: new Set(JSON.parse(localStorage.getItem('expanded') || '[]')),
   selectedFolderId: null,
   messages: [],
+  messagesTotal: 0,          // folder-wide count; > messages.length means more pages exist
   selection: new Set(),
   lastCheckedIndex: null,
   sort: null,                // {key, dir} — null means the default date-desc
@@ -82,7 +83,10 @@ function redrawMessages() {
   if (folder) {
     $('folder-title').textContent = folder.path.replaceAll(folder.delimiter || '/', ' / ');
     const synced = folder.last_synced_at ? `synced ${folder.last_synced_at.slice(0, 16)}Z` : 'never synced';
-    $('folder-meta').textContent = `${folder.msg_count ?? '?'} messages · ${synced}`;
+    const count = state.messagesTotal > state.messages.length
+      ? `showing ${state.messages.length} of ${state.messagesTotal} messages`
+      : `${folder.msg_count ?? '?'} messages`;
+    $('folder-meta').textContent = `${count} · ${synced}`;
   }
   renderMessages($('message-pane'), state, messageHandlers);
   redrawBatchBar();
@@ -156,6 +160,7 @@ async function selectFolder(folder, { forceSync = false } = {}) {
   state.lastCheckedIndex = null;
   state.sort = null;
   state.messages = [];
+  state.messagesTotal = 0;
   if (state.redundant && state.redundant.folderId !== folder.id) state.redundant = null;
   redrawTree();
   redrawMessages();
@@ -165,8 +170,9 @@ async function selectFolder(folder, { forceSync = false } = {}) {
       await api.syncFolder(folder.id);
       await reloadFolders(folder.account_id);
     }
-    const { messages } = await api.messages(folder.id, state.sort);
+    const { messages, total } = await api.messages(folder.id, state.sort);
     state.messages = messages;
+    state.messagesTotal = total;
     redrawTree();
     redrawMessages();
   });
@@ -186,13 +192,20 @@ function goToFolder(folder) {
   document.querySelector('.folder-row.selected')?.scrollIntoView({ block: 'nearest' });
 }
 
+// Refetch window for reloads of an already-loaded list: keep however many
+// rows the user has paged in rather than snapping back to the first page.
+function loadedWindow() {
+  return { limit: Math.max(PAGE_SIZE, state.messages.length) };
+}
+
 async function afterMutation(accountIds) {
   await Promise.all([...new Set(accountIds)].map(reloadFolders));
   if (state.selectedFolderId) {
     const folder = getFolderById(state.selectedFolderId);
     if (folder) {
-      const { messages } = await api.messages(folder.id, state.sort);
+      const { messages, total } = await api.messages(folder.id, state.sort, loadedWindow());
       state.messages = messages;
+      state.messagesTotal = total;
       for (const id of [...state.selection]) {
         if (!messages.some((m) => m.id === id)) state.selection.delete(id);
       }
@@ -205,6 +218,7 @@ async function afterMutation(accountIds) {
     } else {
       state.selectedFolderId = null;
       state.messages = [];
+      state.messagesTotal = 0;
       state.selection.clear();
       state.redundant = null;
     }
@@ -244,8 +258,9 @@ async function scanRedundant(folder) {
     };
     if (state.selectedFolderId === folder.id) {
       // The scan re-synced the folder; reload so marks line up with fresh rows.
-      const { messages } = await api.messages(folder.id, state.sort);
+      const { messages, total } = await api.messages(folder.id, state.sort, loadedWindow());
       state.messages = messages;
+      state.messagesTotal = total;
       await reloadFolders(folder.account_id);
       redrawTree();
       redrawMessages();
@@ -481,8 +496,20 @@ const messageHandlers = {
       : (key === 'date' ? 'desc' : 'asc');
     state.sort = { key, dir };
     state.lastCheckedIndex = null; // shift-click ranges are index-based
-    const { messages } = await api.messages(state.selectedFolderId, state.sort);
+    const { messages, total } = await api.messages(state.selectedFolderId, state.sort, loadedWindow());
     state.messages = messages;
+    state.messagesTotal = total;
+    redrawMessages();
+  }),
+  onLoadMore: (all) => guard(async () => {
+    const folderId = state.selectedFolderId;
+    const offset = state.messages.length;
+    const limit = all ? Math.max(state.messagesTotal - offset, PAGE_SIZE) : PAGE_SIZE;
+    const { messages, total } = await api.messages(folderId, state.sort, { limit, offset });
+    if (state.selectedFolderId !== folderId) return; // switched folders mid-fetch
+    const seen = new Set(state.messages.map((m) => m.id));
+    state.messages = state.messages.concat(messages.filter((m) => !seen.has(m.id)));
+    state.messagesTotal = total;
     redrawMessages();
   }),
   onRowClick: (msg) => {

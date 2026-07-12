@@ -133,6 +133,7 @@ table.messages col.c-attach { width: 4%; }
 table.messages col.c-date { width: 12%; }
 table.messages col.c-to { width: 22%; }
 table.messages td.attach, table.messages th.attach { text-align: right; color: var(--fg-dim); }
+.load-more { display: flex; gap: 8px; justify-content: center; padding: 12px; }
 tr.msg { cursor: pointer; }
 tr.msg.unread td { font-weight: 600; }
 tr.msg:hover { background: var(--row-hover); }

@@ -142,6 +142,34 @@ describe('email-org integration', () => {
       ['Zulu memo', 'Re: Alpha report', 'Beta notes', 'Alpha report']);
   });
 
+  test('message pagination: limit/offset and total on both sort paths', async () => {
+    const folder = await folderByPath(alice.id, 'Sorting');
+    await api('POST', `/api/folders/${folder.id}/sync`);
+    const page = (q) => api('GET', `/api/folders/${folder.id}/messages${q}`);
+
+    // Date sort (SQL LIMIT/OFFSET path): consecutive pages tile the folder.
+    const p1 = await page('?limit=2');
+    assert.equal(p1.total, 4);
+    assert.deepEqual(p1.messages.map((m) => m.subject), ['Zulu memo', 'Re: Alpha report']);
+    const p2 = await page('?limit=2&offset=2');
+    assert.equal(p2.total, 4);
+    assert.deepEqual(p2.messages.map((m) => m.subject), ['Beta notes', 'Alpha report']);
+
+    // Normalized sort (JS slice path): second page of the subject order.
+    const s2 = await page('?sort=subject&limit=2&offset=2');
+    assert.equal(s2.total, 4);
+    assert.deepEqual(s2.messages.map((m) => m.subject), ['Beta notes', 'Zulu memo']);
+
+    // No params: default behavior unchanged, total still reported.
+    const all = await page('');
+    assert.equal(all.messages.length, 4);
+    assert.equal(all.total, 4);
+
+    // Limits beyond the old 2000 cap are honored (needed by Load all).
+    const big = await page('?limit=5000');
+    assert.equal(big.messages.length, 4);
+  });
+
   test('body fetch: preview, full, multipart and html-only', async () => {
     const bodies = await folderByPath(alice.id, 'Bodies');
     await api('POST', `/api/folders/${bodies.id}/sync`);

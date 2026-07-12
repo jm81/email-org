@@ -25,7 +25,14 @@ export const api = {
   flatten: (id) => req('POST', `/api/folders/${id}/flatten`),
   scanRedundant: (id) => req('POST', `/api/folders/${id}/scan-redundant`),
   setDone: (id, done) => req('POST', `/api/folders/${id}/done`, { done }),
-  messages: (id, sort) => req('GET', `/api/folders/${id}/messages${sort ? `?sort=${sort.key}&dir=${sort.dir}` : ''}`),
+  messages: (id, sort, page) => {
+    const q = new URLSearchParams();
+    if (sort) { q.set('sort', sort.key); q.set('dir', sort.dir); }
+    if (page?.limit != null) q.set('limit', page.limit);
+    if (page?.offset) q.set('offset', page.offset);
+    const qs = q.toString();
+    return req('GET', `/api/folders/${id}/messages${qs ? `?${qs}` : ''}`);
+  },
   body: (id, mode) => req('GET', `/api/messages/${id}/body?mode=${mode}`),
   deleteMessages: (ids) => req('POST', '/api/messages/delete', { messageIds: ids }),
   moveMessages: (ids, targetFolderId) => req('POST', '/api/messages/move', { messageIds: ids, targetFolderId }),

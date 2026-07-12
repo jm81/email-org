@@ -2,6 +2,9 @@
 // expansion: click a row to preview (~4 lines), double-click for full text,
 // click again to collapse.
 
+// How many messages each fetch asks for; the server defaults to the same.
+export const PAGE_SIZE = 500;
+
 // flags is a JSON array string from the cache (e.g. '["\\Seen"]'). Rows with
 // no flags data are treated as read — better to under-bold than mislabel.
 function isUnread(msg) {
@@ -134,6 +137,23 @@ export function renderMessages(container, state, handlers) {
 
   table.appendChild(tbody);
   container.appendChild(table);
+
+  const remaining = state.messagesTotal - state.messages.length;
+  if (remaining > 0) {
+    const footer = document.createElement('div');
+    footer.className = 'load-more';
+    if (remaining > PAGE_SIZE) {
+      const more = document.createElement('button');
+      more.textContent = `Load ${PAGE_SIZE} more`;
+      more.addEventListener('click', () => handlers.onLoadMore(false));
+      footer.appendChild(more);
+    }
+    const all = document.createElement('button');
+    all.textContent = `Load all (${remaining} more)`;
+    all.addEventListener('click', () => handlers.onLoadMore(true));
+    footer.appendChild(all);
+    container.appendChild(footer);
+  }
 
   for (const th of table.querySelectorAll('th[data-sort]')) {
     if (state.sort?.key === th.dataset.sort) {

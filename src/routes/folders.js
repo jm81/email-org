@@ -61,15 +61,16 @@ const SORT_KEYS = {
 router.get('/:id/messages', (req, res) => {
   const folder = getFolder(Number(req.params.id));
   if (!folder) return res.status(404).json({ error: 'No such folder' });
-  const limit = Math.min(Number(req.query.limit) || 500, 2000);
-  const offset = Number(req.query.offset) || 0;
+  const limit = Math.floor(Number(req.query.limit)) > 0 ? Math.floor(Number(req.query.limit)) : 500;
+  const offset = Math.max(Math.floor(Number(req.query.offset)) || 0, 0);
+  const total = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE folder_id = ?').get(folder.id).n;
   const keyFn = SORT_KEYS[req.query.sort];
   if (!keyFn) {
     const ord = req.query.sort === 'date' && req.query.dir === 'asc' ? 'ASC' : 'DESC';
     const rows = db.prepare(
       `SELECT * FROM messages WHERE folder_id = ? ORDER BY date ${ord}, uid ${ord} LIMIT ? OFFSET ?`
     ).all(folder.id, limit, offset);
-    return res.json({ folder, messages: rows });
+    return res.json({ folder, messages: rows, total });
   }
   const dir = req.query.dir === 'desc' ? -1 : 1;
   // Fetch newest-first so the stable sort keeps ties date-desc in both
@@ -83,5 +84,5 @@ router.get('/:id/messages', (req, res) => {
     if (b.key === null) return -1;
     return a.key < b.key ? -dir : dir;
   });
-  res.json({ folder, messages: keyed.slice(offset, offset + limit).map((k) => k.row) });
+  res.json({ folder, messages: keyed.slice(offset, offset + limit).map((k) => k.row), total });
 });
