@@ -49,10 +49,14 @@ export function renderMessages(container, state, handlers) {
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = state.selection.has(msg.id);
-    cb.addEventListener('click', (e) => {
+    // The whole cell toggles the checkbox — the box itself is a small target
+    // and near-misses used to open the preview instead. (Clicks on the box
+    // bubble here too; onCheck derives the new state, so no double-toggle.)
+    tdCheck.addEventListener('click', (e) => {
       e.stopPropagation();
       handlers.onCheck(msg, index, e.shiftKey);
     });
+    tdCheck.addEventListener('dblclick', (e) => e.stopPropagation());
     tdCheck.appendChild(cb);
 
     const mk = (text, title) => {
@@ -133,8 +137,8 @@ export function renderMessages(container, state, handlers) {
 
   const checkAll = table.querySelector('#check-all');
   checkAll.checked = state.messages.length > 0 && state.messages.every((m) => state.selection.has(m.id));
-  checkAll.addEventListener('click', (e) => {
-    e.stopPropagation();
+  table.querySelector('th.check').addEventListener('click', (e) => {
+    if (e.target !== checkAll) checkAll.checked = !checkAll.checked;
     handlers.onCheckAll(checkAll.checked);
   });
 }
