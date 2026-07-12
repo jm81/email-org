@@ -83,6 +83,8 @@ await page.waitForSelector('#context-menu:not([hidden])', { timeout: 3000 });
 const msgMenu = await page.$$eval('#context-menu .item', (els) => els.map((e) => e.textContent));
 if (!msgMenu.includes('Move to…')) fail(`message menu missing Move to…: ${msgMenu}`);
 if (!msgMenu.includes('Delete')) fail(`message menu missing Delete: ${msgMenu}`);
+if (msgMenu.includes('Move to INBOX')) fail(`Move to INBOX offered while viewing INBOX: ${msgMenu}`);
+if (!msgMenu.includes('Move to Trash')) fail(`message menu missing Move to Trash: ${msgMenu}`);
 await page.evaluate(() =>
   [...document.querySelectorAll('#context-menu .item')].find((i) => i.textContent === 'Delete').click());
 await page.waitForFunction(() => document.querySelector('#batch-bar')?.textContent.includes('Delete "inbox-'), { timeout: 3000 });
@@ -136,6 +138,31 @@ const selectedName = await page.evaluate(() =>
 if (selectedName !== 'Q1') fail(`expected Q1 selected in tree, got: ${selectedName}`);
 await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 3, { timeout: 15000 });
 ok('Go to… opens the folder and expands the tree to it');
+
+// 11b. Quick-move shortcuts: from Q1 both INBOX and Trash are offered, and
+// "Move to Trash" moves the message into INBOX.Trash without a confirm step.
+await page.evaluate(() =>
+  document.querySelector('tr.msg').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 })));
+await page.waitForSelector('#context-menu:not([hidden])', { timeout: 3000 });
+const quickMenu = await page.$$eval('#context-menu .item', (els) => els.map((e) => e.textContent));
+if (!quickMenu.includes('Move to INBOX')) fail(`message menu missing Move to INBOX: ${quickMenu}`);
+if (!quickMenu.includes('Move to Trash')) fail(`message menu missing Move to Trash: ${quickMenu}`);
+await page.evaluate(() =>
+  [...document.querySelectorAll('#context-menu .item')].find((i) => i.textContent === 'Move to Trash').click());
+await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 2, { timeout: 15000 });
+// Confirm arrival: open Trash and check the moved message landed next to the
+// seeded one. Opening it also header-syncs the folder, so the quiet-filter
+// test below sees Trash's 2026 message and hides the whole INBOX subtree.
+await page.click('#btn-goto');
+await page.waitForSelector('#folder-picker input', { timeout: 3000 });
+await page.type('#folder-picker input', 'trash');
+await page.keyboard.press('Enter');
+await page.waitForFunction(() =>
+  document.querySelector('#folder-title')?.textContent === 'INBOX / Trash', { timeout: 15000 });
+await page.waitForFunction(() => document.querySelectorAll('tr.msg').length === 2, { timeout: 15000 });
+const trashSubjects = await page.$$eval('tr.msg td:nth-child(3)', (els) => els.map((e) => e.textContent));
+if (!trashSubjects.some((s) => s.includes('Q1 msg'))) fail(`moved message not in Trash: ${trashSubjects}`);
+ok('quick-move shortcuts offer INBOX and Trash; Move to Trash moves the message');
 
 // 12. Rename a folder via the context menu's inline input
 await page.evaluate(() => {

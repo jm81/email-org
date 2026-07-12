@@ -267,6 +267,23 @@ async function deleteMessages(ids, label = messagesLabel(ids)) {
   await runJob(api.deleteMessages(ids), 'Deleting', [folder.account_id]);
 }
 
+// Inbox/Trash shortcuts on the current folder's account, skipping whichever
+// is the folder being viewed. Trash is matched by SPECIAL-USE, falling back
+// to the conventional INBOX<delim>Trash path.
+function quickMoveTargets() {
+  const current = getFolderById(state.selectedFolderId);
+  if (!current) return [];
+  const folders = state.foldersByAccount.get(current.account_id) ?? [];
+  const find = (pred) => folders.find((f) => f.selectable && f.id !== current.id && pred(f));
+  const inbox = find((f) => f.path.toUpperCase() === 'INBOX');
+  const trash = find((f) => f.special_use === '\\Trash'
+    || f.path.toUpperCase() === 'INBOX' + (f.delimiter || '/') + 'TRASH');
+  return [
+    inbox && { label: 'Move to INBOX', folder: inbox },
+    trash && { label: 'Move to Trash', folder: trash },
+  ].filter(Boolean);
+}
+
 function pickMoveTarget(ids, label, opts) {
   showFolderPicker(
     {
@@ -483,6 +500,9 @@ const messageHandlers = {
       '-',
       { label: 'Move to…', action: () => pickMoveTarget(ids, label, { confirm: false }) },
     ];
+    for (const t of quickMoveTargets()) {
+      items.push({ label: t.label, action: () => moveMessages(ids, t.folder, label, { confirm: false }) });
+    }
     if (state.lastMoveTarget && getFolderById(state.lastMoveTarget.id)) {
       items.push({ label: `Move to ${state.lastMoveTarget.name}`, action: () => moveMessages(ids, state.lastMoveTarget, label, { confirm: false }) });
     }

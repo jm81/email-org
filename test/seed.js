@@ -92,6 +92,14 @@ export async function seed() {
         m.flags, new Date(m.date));
     }
 
+    // Trash for the quick-move context-menu shortcuts (Maildir++: child of
+    // INBOX). Its message is recent so the quiet filter hides the whole
+    // INBOX subtree once the e2e run has opened (and thus header-synced) it.
+    await c.mailboxCreate('INBOX.Trash');
+    await c.append('INBOX.Trash',
+      rfc822({ from: 'trash@test', subject: 'trashed recent', date: '2026-06-25T10:00:00Z', body: 'recently trashed' }),
+      [], new Date('2026-06-25T10:00:00Z'));
+
     // Nested archive tree for flatten tests (Maildir++ delimiter ".").
     const tree = {
       'Archive': 1,
