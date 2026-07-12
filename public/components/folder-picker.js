@@ -3,11 +3,14 @@
 // cross-account moves happen.
 let pickerEl = null;
 
-export function showFolderPicker({ accounts, foldersByAccount, excludeFolderId }, onPick) {
+export function showFolderPicker({ accounts, foldersByAccount, excludeFolderId, preferredAccountId }, onPick) {
   hideFolderPicker();
 
+  const ordered = preferredAccountId == null
+    ? accounts
+    : [...accounts].sort((a, b) => (a.id === preferredAccountId ? 0 : 1) - (b.id === preferredAccountId ? 0 : 1));
   const entries = [];
-  for (const account of accounts) {
+  for (const account of ordered) {
     for (const f of foldersByAccount.get(account.id) ?? []) {
       if (!f.selectable || f.id === excludeFolderId) continue;
       entries.push({ folder: f, account, label: f.path.replaceAll(f.delimiter || '/', ' / ') });

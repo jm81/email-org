@@ -269,7 +269,12 @@ async function deleteMessages(ids, label = messagesLabel(ids)) {
 
 function pickMoveTarget(ids, label, opts) {
   showFolderPicker(
-    { accounts: state.accounts, foldersByAccount: state.foldersByAccount, excludeFolderId: state.selectedFolderId },
+    {
+      accounts: state.accounts,
+      foldersByAccount: state.foldersByAccount,
+      excludeFolderId: state.selectedFolderId,
+      preferredAccountId: getFolderById(state.selectedFolderId)?.account_id,
+    },
     (target) => moveMessages(ids, target, label, opts)
   );
 }
@@ -561,7 +566,11 @@ function wireTopbar() {
 
   $('btn-goto').addEventListener('click', () => {
     showFolderPicker(
-      { accounts: state.accounts, foldersByAccount: state.foldersByAccount },
+      {
+        accounts: state.accounts,
+        foldersByAccount: state.foldersByAccount,
+        preferredAccountId: getFolderById(state.selectedFolderId)?.account_id,
+      },
       (folder) => goToFolder(folder)
     );
   });
