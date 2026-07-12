@@ -13,6 +13,7 @@ const state = {
   messages: [],
   selection: new Set(),
   lastCheckedIndex: null,
+  sort: null,                // {key, dir} — null means the default date-desc
   expandedBodies: new Map(), // msgId -> {mode, body, loading}
   redundant: null,           // {folderId, byId: Map(msgId -> containedInId), scanned}
   filters: { quietMonths: null, done: 'all', doneBefore: null },
@@ -153,6 +154,7 @@ async function selectFolder(folder, { forceSync = false } = {}) {
   state.selection.clear();
   state.expandedBodies.clear();
   state.lastCheckedIndex = null;
+  state.sort = null;
   state.messages = [];
   if (state.redundant && state.redundant.folderId !== folder.id) state.redundant = null;
   redrawTree();
@@ -163,7 +165,7 @@ async function selectFolder(folder, { forceSync = false } = {}) {
       await api.syncFolder(folder.id);
       await reloadFolders(folder.account_id);
     }
-    const { messages } = await api.messages(folder.id);
+    const { messages } = await api.messages(folder.id, state.sort);
     state.messages = messages;
     redrawTree();
     redrawMessages();
@@ -189,7 +191,7 @@ async function afterMutation(accountIds) {
   if (state.selectedFolderId) {
     const folder = getFolderById(state.selectedFolderId);
     if (folder) {
-      const { messages } = await api.messages(folder.id);
+      const { messages } = await api.messages(folder.id, state.sort);
       state.messages = messages;
       for (const id of [...state.selection]) {
         if (!messages.some((m) => m.id === id)) state.selection.delete(id);
@@ -242,7 +244,7 @@ async function scanRedundant(folder) {
     };
     if (state.selectedFolderId === folder.id) {
       // The scan re-synced the folder; reload so marks line up with fresh rows.
-      const { messages } = await api.messages(folder.id);
+      const { messages } = await api.messages(folder.id, state.sort);
       state.messages = messages;
       await reloadFolders(folder.account_id);
       redrawTree();
@@ -473,6 +475,16 @@ const messageHandlers = {
     else state.selection.clear();
     redrawMessages();
   },
+  onSort: (key) => guard(async () => {
+    const dir = state.sort?.key === key
+      ? (state.sort.dir === 'asc' ? 'desc' : 'asc')
+      : (key === 'date' ? 'desc' : 'asc');
+    state.sort = { key, dir };
+    state.lastCheckedIndex = null; // shift-click ranges are index-based
+    const { messages } = await api.messages(state.selectedFolderId, state.sort);
+    state.messages = messages;
+    redrawMessages();
+  }),
   onRowClick: (msg) => {
     if (state.expandedBodies.has(msg.id)) {
       state.expandedBodies.delete(msg.id);

@@ -123,6 +123,9 @@ table.messages td {
   padding: 4px 8px; border-bottom: 1px solid var(--border);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0;
 }
+table.messages th[data-sort] { cursor: pointer; }
+table.messages th[data-sort]:hover { color: var(--fg); }
+table.messages .sort-arrow { color: var(--fg-dim); }
 table.messages td.check, table.messages th.check { width: 38px; max-width: none; }
 table.messages col.c-from { width: 22%; }
 table.messages col.c-subject { width: 40%; }

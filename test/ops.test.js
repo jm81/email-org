@@ -120,6 +120,28 @@ describe('email-org integration', () => {
     assert.equal(body.date.slice(0, 10), '2024-04-01');
   });
 
+  test('message sorting: normalized subject and domain-first address keys', async () => {
+    const folder = await folderByPath(alice.id, 'Sorting');
+    await api('POST', `/api/folders/${folder.id}/sync`);
+    const subjects = async (q) =>
+      (await api('GET', `/api/folders/${folder.id}/messages${q}`)).messages.map((m) => m.subject);
+
+    assert.deepEqual(await subjects(''), ['Zulu memo', 'Re: Alpha report', 'Beta notes', 'Alpha report']);
+    assert.deepEqual(await subjects('?sort=date&dir=asc'),
+      ['Alpha report', 'Beta notes', 'Re: Alpha report', 'Zulu memo']);
+    // from: domain outranks local part (zed@bbb.com before bob@ccc.com)
+    assert.deepEqual(await subjects('?sort=from'),
+      ['Re: Alpha report', 'Beta notes', 'Alpha report', 'Zulu memo']);
+    assert.deepEqual(await subjects('?sort=from&dir=desc'),
+      ['Zulu memo', 'Alpha report', 'Beta notes', 'Re: Alpha report']);
+    // subject: Re: prefix ignored, the tied pair stays newest-first
+    assert.deepEqual(await subjects('?sort=subject'),
+      ['Re: Alpha report', 'Alpha report', 'Beta notes', 'Zulu memo']);
+    // to: the zzz.org recipient sorts after the alice@test ties (newest-first)
+    assert.deepEqual(await subjects('?sort=to'),
+      ['Zulu memo', 'Re: Alpha report', 'Beta notes', 'Alpha report']);
+  });
+
   test('body fetch: preview, full, multipart and html-only', async () => {
     const bodies = await folderByPath(alice.id, 'Bodies');
     await api('POST', `/api/folders/${bodies.id}/sync`);

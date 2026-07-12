@@ -18,6 +18,18 @@ export function normalizeSubject(subject) {
   return s.replace(/\s+/g, ' ');
 }
 
+// First address in a comma-joined "Name <addr>, ..." list -> a key that
+// sorts by domain, then local part, case-insensitively ("logical grouping"
+// for the message-list From/To sorts). Null when no address is parseable;
+// callers sort nulls last.
+export function addrSortKey(addrs) {
+  const token = String(addrs ?? '').split(/[\s,<>]+/).find((t) => t.includes('@'));
+  const addr = (token ?? '').toLowerCase();
+  const at = addr.lastIndexOf('@');
+  if (at < 1 || at === addr.length - 1) return null;
+  return addr.slice(at + 1) + '\x00' + addr.slice(0, at);
+}
+
 // Body text -> lowercase word tokens, immune to the mutations reply clients
 // introduce: ">"/">>" quote markers, indentation, re-wrapping, punctuation
 // and HTML-entity noise. URLs are dropped because plain-text and HTML-derived

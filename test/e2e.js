@@ -164,6 +164,19 @@ const trashSubjects = await page.$$eval('tr.msg td:nth-child(3)', (els) => els.m
 if (!trashSubjects.some((s) => s.includes('Q1 msg'))) fail(`moved message not in Trash: ${trashSubjects}`);
 ok('quick-move shortcuts offer INBOX and Trash; Move to Trash moves the message');
 
+// 11c. Sortable headers: in Trash ("trashed recent" + the moved Q1 message),
+// clicking Subject sorts ascending by normalized subject; again reverses.
+await page.evaluate(() =>
+  [...document.querySelectorAll('table.messages th')].find((t) => t.dataset.sort === 'subject').click());
+await page.waitForFunction(() =>
+  document.querySelector('tr.msg td:nth-child(3)')?.textContent.startsWith('Archive.2023.Q1'), { timeout: 15000 });
+if (!await page.$('table.messages th .sort-arrow')) fail('sort arrow missing after header click');
+await page.evaluate(() =>
+  [...document.querySelectorAll('table.messages th')].find((t) => t.dataset.sort === 'subject').click());
+await page.waitForFunction(() =>
+  document.querySelector('tr.msg td:nth-child(3)')?.textContent.startsWith('trashed'), { timeout: 15000 });
+ok('subject header sorts ascending and toggles to descending');
+
 // 12. Rename a folder via the context menu's inline input
 await page.evaluate(() => {
   const row = [...document.querySelectorAll('.folder-row')].find((r) => r.querySelector('.folder-name')?.textContent === 'Doomed');

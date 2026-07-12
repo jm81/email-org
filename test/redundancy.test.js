@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeSubject, normalizeBody, shingles, coverage, findRedundant,
-  MIN_WORDS, COVERAGE_THRESHOLD,
+  addrSortKey, MIN_WORDS, COVERAGE_THRESHOLD,
 } from '../src/redundancy.js';
 
 describe('normalizeSubject', () => {
@@ -16,6 +16,26 @@ describe('normalizeSubject', () => {
     assert.equal(normalizeSubject('  Budget   plan '), 'budget plan');
     assert.equal(normalizeSubject('Regarding: the plan'), 'regarding: the plan');
     assert.equal(normalizeSubject(null), '');
+  });
+});
+
+describe('addrSortKey', () => {
+  test('domain sorts before local part, case-insensitively', () => {
+    assert.equal(addrSortKey('Jane Doe <Jane@Dom.com>'), 'dom.com\x00jane');
+    assert.ok(addrSortKey('zed@aaa.com') < addrSortKey('ann@bbb.com'), 'domain outranks local');
+    assert.ok(addrSortKey('ann@dom.com') < addrSortKey('zed@dom.com'), 'local breaks domain ties');
+  });
+  test('first address wins in multi-recipient lists, bracketed or bare', () => {
+    assert.equal(addrSortKey('Jane <jane@dom.com>, bob@x.co'), addrSortKey('jane@dom.com'));
+    assert.equal(addrSortKey('bob@x.co, Jane <jane@dom.com>'), addrSortKey('bob@x.co'));
+    assert.equal(addrSortKey('Doe, Jane <jane@dom.com>'), addrSortKey('jane@dom.com'));
+  });
+  test('unparseable input keys to null', () => {
+    assert.equal(addrSortKey(null), null);
+    assert.equal(addrSortKey(''), null);
+    assert.equal(addrSortKey('no address here'), null);
+    assert.equal(addrSortKey('@dom.com'), null);
+    assert.equal(addrSortKey('user@'), null);
   });
 });
 

@@ -195,6 +195,22 @@ export async function seed() {
       '',
     ].join('\r\n'), [], new Date('2024-04-01T00:00:00Z'));
 
+    // Fixture folder for the message-list sort tests: mixed domains and
+    // local parts, a bare (nameless) From, a Re:-prefixed subject twin,
+    // and one odd recipient.
+    await c.mailboxCreate('Sorting');
+    const sorting = [
+      { subject: 'Alpha report', from: 'Zed <zed@bbb.com>', to: 'Someone <zzz@zzz.org>', date: '2024-01-01T10:00:00Z' },
+      { subject: 'Beta notes', from: 'ann@bbb.com', date: '2024-01-02T10:00:00Z' },
+      { subject: 'Re: Alpha report', from: 'Ann <ann@aaa.com>', date: '2024-01-03T10:00:00Z' },
+      { subject: 'Zulu memo', from: 'Bob <bob@ccc.com>', date: '2024-01-04T10:00:00Z' },
+    ];
+    for (const m of sorting) {
+      await c.append('Sorting',
+        rfc822({ from: m.from, to: m.to, subject: m.subject, date: m.date, body: `body of ${m.subject}` }),
+        [], new Date(m.date));
+    }
+
     // Sacrificial folder for the UIDVALIDITY safety test.
     await c.mailboxCreate('Doomed');
     for (let i = 1; i <= 2; i++) {

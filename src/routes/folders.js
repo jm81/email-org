@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { getFolder, syncFolderMessages } from '../imap/sync.js';
 import { createFolder, deleteFolder, flattenFolder, renameFolder } from '../imap/ops.js';
 import { scanFolderRedundancy } from '../imap/redundancy.js';
+import { addrSortKey, normalizeSubject } from '../redundancy.js';
 import { startJob } from '../jobs.js';
 
 export const router = Router();
@@ -49,13 +50,38 @@ router.post('/:id/done', (req, res) => {
   res.json({ ...folder, done_at });
 });
 
+// Normalized sort keys for ?sort=; computed in JS because SQL can't express
+// them. Null keys always sort last. Date (the default) stays in SQL.
+const SORT_KEYS = {
+  subject: (r) => normalizeSubject(r.subject) || null,
+  from: (r) => addrSortKey(r.from_addr),
+  to: (r) => addrSortKey(r.to_addrs),
+};
+
 router.get('/:id/messages', (req, res) => {
   const folder = getFolder(Number(req.params.id));
   if (!folder) return res.status(404).json({ error: 'No such folder' });
   const limit = Math.min(Number(req.query.limit) || 500, 2000);
   const offset = Number(req.query.offset) || 0;
-  const rows = db.prepare(
-    'SELECT * FROM messages WHERE folder_id = ? ORDER BY date DESC, uid DESC LIMIT ? OFFSET ?'
-  ).all(folder.id, limit, offset);
-  res.json({ folder, messages: rows });
+  const keyFn = SORT_KEYS[req.query.sort];
+  if (!keyFn) {
+    const ord = req.query.sort === 'date' && req.query.dir === 'asc' ? 'ASC' : 'DESC';
+    const rows = db.prepare(
+      `SELECT * FROM messages WHERE folder_id = ? ORDER BY date ${ord}, uid ${ord} LIMIT ? OFFSET ?`
+    ).all(folder.id, limit, offset);
+    return res.json({ folder, messages: rows });
+  }
+  const dir = req.query.dir === 'desc' ? -1 : 1;
+  // Fetch newest-first so the stable sort keeps ties date-desc in both
+  // directions, then sort the whole folder before applying limit/offset —
+  // groupings must see rows beyond the first page.
+  const rows = db.prepare('SELECT * FROM messages WHERE folder_id = ? ORDER BY date DESC, uid DESC').all(folder.id);
+  const keyed = rows.map((row) => ({ key: keyFn(row), row }));
+  keyed.sort((a, b) => {
+    if (a.key === b.key) return 0;
+    if (a.key === null) return 1;
+    if (b.key === null) return -1;
+    return a.key < b.key ? -dir : dir;
+  });
+  res.json({ folder, messages: keyed.slice(offset, offset + limit).map((k) => k.row) });
 });

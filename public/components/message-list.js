@@ -34,7 +34,7 @@ export function renderMessages(container, state, handlers) {
     <colgroup><col class="c-check"><col class="c-from"><col class="c-subject"><col class="c-attach"><col class="c-date"><col class="c-to"></colgroup>
     <thead><tr>
       <th class="check"><input type="checkbox" id="check-all"></th>
-      <th>From</th><th>Subject</th><th class="attach" title="Attachments">📎</th><th>Date</th><th>To</th>
+      <th data-sort="from">From</th><th data-sort="subject">Subject</th><th class="attach" title="Attachments">📎</th><th data-sort="date">Date</th><th data-sort="to">To</th>
     </tr></thead>`;
   const tbody = document.createElement('tbody');
 
@@ -134,6 +134,16 @@ export function renderMessages(container, state, handlers) {
 
   table.appendChild(tbody);
   container.appendChild(table);
+
+  for (const th of table.querySelectorAll('th[data-sort]')) {
+    if (state.sort?.key === th.dataset.sort) {
+      const arrow = document.createElement('span');
+      arrow.className = 'sort-arrow';
+      arrow.textContent = state.sort.dir === 'asc' ? ' ▲' : ' ▼';
+      th.appendChild(arrow);
+    }
+    th.addEventListener('click', () => handlers.onSort(th.dataset.sort));
+  }
 
   const checkAll = table.querySelector('#check-all');
   checkAll.checked = state.messages.length > 0 && state.messages.every((m) => state.selection.has(m.id));
