@@ -88,6 +88,14 @@ function fmtAddr(list) {
   return list.map((a) => a.name ? `${a.name} <${a.address}>` : a.address).join(', ');
 }
 
+// A malformed Date: header parses to an Invalid Date — truthy, but
+// toISOString() on it throws. Treat invalid the same as absent.
+function isoDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d) ? null : d.toISOString();
+}
+
 function rowFromFetch(folderId, uidvalidity, msg) {
   const env = msg.envelope ?? {};
   return {
@@ -97,8 +105,8 @@ function rowFromFetch(folderId, uidvalidity, msg) {
     subject: env.subject ?? null,
     from_addr: fmtAddr(env.from),
     to_addrs: fmtAddr(env.to),
-    date: env.date ? new Date(env.date).toISOString() : (msg.internalDate ? new Date(msg.internalDate).toISOString() : null),
-    internaldate: msg.internalDate ? new Date(msg.internalDate).toISOString() : null,
+    date: isoDate(env.date) ?? isoDate(msg.internalDate),
+    internaldate: isoDate(msg.internalDate),
     size: msg.size ?? null,
     flags: JSON.stringify([...(msg.flags ?? [])]),
     attachment_count: msg.bodyStructure ? countAttachments(msg.bodyStructure) : null,

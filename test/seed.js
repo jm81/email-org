@@ -180,6 +180,21 @@ export async function seed() {
         [], new Date(m.date));
     }
 
+    // A message whose Date: header doesn't parse — header sync must fall
+    // back to INTERNALDATE instead of throwing "Invalid time value".
+    await c.mailboxCreate('BadDate');
+    await c.append('BadDate', [
+      'From: baddate@test',
+      'To: alice@test',
+      'Subject: bad date header',
+      'Date: not a real date',
+      'Message-ID: <baddate@test>',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'body of the bad-date message',
+      '',
+    ].join('\r\n'), [], new Date('2024-04-01T00:00:00Z'));
+
     // Sacrificial folder for the UIDVALIDITY safety test.
     await c.mailboxCreate('Doomed');
     for (let i = 1; i <= 2; i++) {

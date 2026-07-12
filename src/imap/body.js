@@ -31,7 +31,10 @@ export async function fetchBodyText(messageId) {
     subject: parsed.subject ?? row.subject,
     from: parsed.from?.text ?? row.from_addr,
     to: parsed.to?.text ?? row.to_addrs,
-    date: parsed.date?.toISOString() ?? row.date,
+    // mailparser substitutes the current time for an unparseable Date
+    // header, so prefer the cached date (envelope, with INTERNALDATE
+    // fallback) and use the parsed one only when the cache has none.
+    date: row.date ?? (parsed.date && !isNaN(parsed.date) ? parsed.date.toISOString() : null),
     text: text || '(no text content)',
   };
 }

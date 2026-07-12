@@ -106,6 +106,20 @@ describe('email-org integration', () => {
     assert.ok(JSON.parse(seen.flags).includes('\\Seen'));
   });
 
+  test('malformed Date header: sync falls back to INTERNALDATE', async () => {
+    const bad = await folderByPath(alice.id, 'BadDate');
+    const synced = await api('POST', `/api/folders/${bad.id}/sync`);
+    assert.equal(synced.msg_count, 1);
+
+    const { messages } = await api('GET', `/api/folders/${bad.id}/messages`);
+    assert.equal(messages[0].subject, 'bad date header');
+    assert.equal(messages[0].date.slice(0, 10), '2024-04-01');
+
+    const body = await api('GET', `/api/messages/${messages[0].id}/body?mode=full`);
+    assert.ok(body.text.includes('body of the bad-date message'));
+    assert.equal(body.date.slice(0, 10), '2024-04-01');
+  });
+
   test('body fetch: preview, full, multipart and html-only', async () => {
     const bodies = await folderByPath(alice.id, 'Bodies');
     await api('POST', `/api/folders/${bodies.id}/sync`);
