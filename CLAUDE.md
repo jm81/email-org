@@ -33,3 +33,10 @@ are the non-negotiables that aren't obvious from the code.
 - Per-account IMAP work must go through `pool.run()` (serialized; one
   connection per account). Never read `client.mailbox` state without a fresh
   SELECT — use `pool.withFreshMailbox()` (see the comment there for why).
+- The redundant-message scan is deliberately read-only: it only flags
+  messages; deletion always goes through the user-reviewed select → Delete
+  flow. Don't wire the scan to any auto-delete.
+- Schema changes must be additive and guarded: `schema.sql` only runs
+  `CREATE TABLE IF NOT EXISTS`, so existing databases (including the real
+  `data/app.db`) get new columns via the PRAGMA-checked `ALTER TABLE` block
+  in `src/db.js`. Follow that pattern.

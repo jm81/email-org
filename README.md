@@ -22,12 +22,23 @@ certificate, check "Allow untrusted certificate". Use "Test" before saving.
 - **Folder tree** for all accounts: expand/collapse, message counts, and a
   hint showing the month of each folder's most recent mail
 - **Right-click a folder** (or its `⋮`): add subfolder (inline, no dialog),
-  sync, mark done, flatten, delete
+  rename (inline), sync, mark done, find redundant messages, flatten, delete
+- **Go to…** (top bar): jump straight to any folder via the type-ahead picker
 - **Flatten**: moves every message in a folder's whole subtree up into that
   folder, then deletes the subfolders (deepest-first; a subfolder is only
   deleted after it is verified empty, so it's safe to re-run after a failure)
 - **Message list**: click a row for a ~4-line text preview, double-click for
-  the full text, click again to collapse; checkboxes + shift-click for ranges
+  the full text, click again to collapse; checkboxes + shift-click for ranges;
+  unread messages are bold and attachment counts are shown per row
+- **Right-click a message row**: open full message, show source, move, delete
+- **Full message view**: opens in a new tab with headers and attachment
+  downloads; the HTML body renders in a sandboxed iframe (no scripts, inline
+  `cid:` images resolved)
+- **Redundant-message scan** ("Find redundant messages" on a folder): flags
+  messages whose text is ~fully quoted inside a newer message in the same
+  thread (subject-grouped, shingle overlap on normalized body text). The scan
+  is read-only — flagged rows just get a badge; deleting them goes through the
+  normal reviewed select → Delete flow
 - **Batch move/delete** with a single inline confirm (Enter confirms, Esc
   cancels). "Move to…" opens a type-ahead folder picker spanning all
   accounts — picking a folder in another account does a cross-account move
@@ -62,8 +73,11 @@ server.js            express app (port 8323, override with PORT)
 src/db.js            sqlite open + schema (data dir override: EMAIL_ORG_DATA)
 src/imap/pool.js     one connection per account, all ops serialized per account
 src/imap/sync.js     folder-list + per-folder header sync (UIDVALIDITY-aware)
-src/imap/ops.js      create/delete folder, flatten, batch delete, moves
+src/imap/ops.js      create/rename/delete folder, flatten, batch delete, moves
 src/imap/body.js     on-demand body fetch + text extraction (mailparser)
+src/imap/redundancy.js  per-folder scan for messages quoted in a newer reply
+src/redundancy.js    pure text logic for that scan (unit-tested, no DB/IMAP)
+src/message-view.js  standalone "Open full message" page (sandboxed HTML body)
 src/routes/          /api/accounts, /api/folders, /api/messages, /api/jobs
 public/              vanilla-JS frontend, no build step
 test/                integration + e2e suites and the throwaway Dovecot
