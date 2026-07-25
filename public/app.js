@@ -10,6 +10,7 @@ const state = {
   foldersByAccount: new Map(),
   expanded: new Set(JSON.parse(localStorage.getItem('expanded') || '[]')),
   selectedFolderId: null,
+  syncing: false,           // true while the selected folder's initial/forced sync is in flight
   messages: [],
   messagesTotal: 0,          // folder-wide count; > messages.length means more pages exist
   selection: new Set(),
@@ -162,10 +163,11 @@ async function selectFolder(folder, { forceSync = false } = {}) {
   state.messages = [];
   state.messagesTotal = 0;
   if (state.redundant && state.redundant.folderId !== folder.id) state.redundant = null;
+  state.syncing = forceSync || !folder.last_synced_at;
   redrawTree();
   redrawMessages();
   await guard(async () => {
-    if (forceSync || !folder.last_synced_at) {
+    if (state.syncing) {
       $('folder-meta').textContent = 'syncing…';
       await api.syncFolder(folder.id);
       await reloadFolders(folder.account_id);
@@ -173,9 +175,10 @@ async function selectFolder(folder, { forceSync = false } = {}) {
     const { messages, total } = await api.messages(folder.id, state.sort);
     state.messages = messages;
     state.messagesTotal = total;
-    redrawTree();
-    redrawMessages();
   });
+  state.syncing = false;
+  redrawTree();
+  redrawMessages();
 }
 
 function goToFolder(folder) {

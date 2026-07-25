@@ -26,7 +26,7 @@ export function renderMessages(container, state, handlers) {
   if (!state.messages.length) {
     const p = document.createElement('p');
     p.className = 'placeholder';
-    p.textContent = 'No messages in this folder.';
+    p.textContent = state.syncing ? 'Syncing…' : 'No messages in this folder.';
     container.appendChild(p);
     return;
   }
