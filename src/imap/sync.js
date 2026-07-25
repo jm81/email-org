@@ -143,6 +143,17 @@ export async function syncFolderMessages(folderId) {
         }
       }
 
+      // Flags (e.g. \Seen) change server-side after a message is already
+      // cached — another client reads it, etc. Refresh flags for every
+      // still-live cached UID so read state doesn't go stale forever.
+      const flagUids = liveUids.filter((u) => cachedUids.has(u));
+      const flagUpdates = [];
+      if (flagUids.length) {
+        for await (const msg of client.fetch(flagUids.join(','), { uid: true, flags: true }, { uid: true })) {
+          flagUpdates.push({ uid: msg.uid, flags: JSON.stringify([...(msg.flags ?? [])]) });
+        }
+      }
+
       // Backfill: rows cached before attachment_count existed are never
       // refetched by the incremental path above, so grab just their
       // bodystructure here. One-time cost per folder; no-op once populated.
@@ -156,7 +167,7 @@ export async function syncFolderMessages(folderId) {
           if (msg.bodyStructure) backfill.push({ uid: msg.uid, count: countAttachments(msg.bodyStructure) });
         }
       }
-      return { uidValidity, uidNext: mailbox.uidNext, fullResync, liveUids, rows, backfill };
+      return { uidValidity, uidNext: mailbox.uidNext, fullResync, liveUids, rows, backfill, flagUpdates };
     })
   );
 
@@ -173,6 +184,9 @@ export async function syncFolderMessages(folderId) {
 
     const setCount = db.prepare('UPDATE messages SET attachment_count = ? WHERE folder_id = ? AND uid = ?');
     for (const b of result.backfill) setCount.run(b.count, folderId, b.uid);
+
+    const setFlags = db.prepare('UPDATE messages SET flags = ? WHERE folder_id = ? AND uid = ?');
+    for (const f of result.flagUpdates) setFlags.run(f.flags, folderId, f.uid);
 
     const stats = db.prepare(
       'SELECT COUNT(*) AS n, MIN(date) AS first, MAX(date) AS last FROM messages WHERE folder_id = ?'

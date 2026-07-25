@@ -302,6 +302,26 @@ describe('email-org integration', () => {
     assert.equal(messages.find((m) => m.subject === 'multipart mail').attachment_count, 0);
   });
 
+  test('resync picks up \\Seen flag changes made by another client', async () => {
+    const inbox = await folderByPath(alice.id, 'INBOX');
+    await api('POST', `/api/folders/${inbox.id}/sync`);
+    const before = (await api('GET', `/api/folders/${inbox.id}/messages`)).messages;
+    const receipt = before.find((m) => m.subject === 'inbox-2 receipts');
+    assert.ok(!JSON.parse(receipt.flags).includes('\\Seen'), 'seeded unread');
+
+    // Another client (e.g. webmail, phone) marks it read directly on the server.
+    const c = new ImapFlow({ ...IMAP, auth: ALICE, logger: false });
+    await c.connect();
+    await c.mailboxOpen('INBOX');
+    await c.messageFlagsAdd({ uid: String(receipt.uid) }, ['\\Seen'], { uid: true });
+    await c.logout();
+
+    await api('POST', `/api/folders/${inbox.id}/sync`);
+    const after = (await api('GET', `/api/folders/${inbox.id}/messages`)).messages;
+    const updated = after.find((m) => m.subject === 'inbox-2 receipts');
+    assert.ok(JSON.parse(updated.flags).includes('\\Seen'), 'flag change picked up without a full resync');
+  });
+
   test('create and delete a subfolder', async () => {
     const created = await api('POST', '/api/folders', { accountId: alice.id, parentPath: 'Archive', name: 'Fresh' });
     assert.equal(created.path, 'Archive.Fresh');
