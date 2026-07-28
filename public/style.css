@@ -127,10 +127,10 @@ table.messages th[data-sort] { cursor: pointer; }
 table.messages th[data-sort]:hover { color: var(--fg); }
 table.messages .sort-arrow { color: var(--fg-dim); }
 table.messages td.check, table.messages th.check { width: 38px; max-width: none; }
-table.messages col.c-from { width: 22%; }
-table.messages col.c-subject { width: 40%; }
+table.messages col.c-from { width: 20%; }
+table.messages col.c-subject { width: 36%; }
 table.messages col.c-attach { width: 4%; }
-table.messages col.c-date { width: 12%; }
+table.messages col.c-date { width: 18%; }
 table.messages col.c-to { width: 22%; }
 table.messages td.attach, table.messages th.attach { text-align: right; color: var(--fg-dim); }
 .load-more { display: flex; gap: 8px; justify-content: center; padding: 12px; }

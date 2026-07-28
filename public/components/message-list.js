@@ -16,9 +16,11 @@ function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   const now = new Date();
-  return d.getFullYear() === now.getFullYear()
+  const date = d.getFullYear() === now.getFullYear()
     ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${date} ${time}`;
 }
 
 export function renderMessages(container, state, handlers) {
