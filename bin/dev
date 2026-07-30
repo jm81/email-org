@@ -1,0 +1,138 @@
+#!/bin/bash
+# Run the app server detached, so it doesn't tie up a terminal.
+#   bin/dev start | stop | restart | status | log
+# Server-side changes need an explicit `restart`; public/ changes just need a
+# browser reload. Runtime state lives in .run/ (gitignored).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+PORT="${PORT:-8323}"
+RUNDIR="$ROOT/.run"
+PIDFILE="$RUNDIR/server.pid"
+LOGFILE="$RUNDIR/server.log"
+URL="http://127.0.0.1:$PORT"
+
+# Echoes our pid if the pidfile names a live process; drops a stale pidfile.
+running_pid() {
+  [ -f "$PIDFILE" ] || return 1
+  local pid
+  pid="$(cat "$PIDFILE")"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    echo "$pid"
+    return 0
+  fi
+  rm -f "$PIDFILE"
+  return 1
+}
+
+# Empty output, exit 0, when nothing is listening — callers assign it directly,
+# and under `set -e` a non-zero return would abort the script.
+port_pid() { lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null | head -1 || true; }
+
+start() {
+  local pid
+  if pid="$(running_pid)"; then
+    echo "already running (pid $pid) at $URL"
+    return 0
+  fi
+
+  # Someone else owns the port — probably a foreground `npm start`. Don't
+  # clobber a server we didn't launch.
+  local other
+  other="$(port_pid)"
+  if [ -n "$other" ]; then
+    echo "port $PORT is already in use by pid $other (not ours) — stop it first" >&2
+    return 1
+  fi
+
+  mkdir -p "$RUNDIR"
+  if [ -f "$LOGFILE" ]; then mv "$LOGFILE" "$LOGFILE.prev"; fi
+
+  # Must stay a simple command: backgrounding a compound (`cd … && node …`)
+  # makes $! the wrapper subshell, and killing that orphans the server.
+  PORT="$PORT" nohup node server.js >>"$LOGFILE" 2>&1 &
+  pid=$!
+  echo "$pid" >"$PIDFILE"
+
+  for _ in $(seq 1 40); do
+    if curl -sf "$URL/api/accounts" >/dev/null 2>&1; then
+      echo "email-org running at $URL (pid $pid)"
+      echo "logs: $LOGFILE  ·  npm run dev:log"
+      return 0
+    fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+
+  echo "server failed to come up on $PORT; last 20 log lines:" >&2
+  tail -20 "$LOGFILE" >&2 || true
+  kill "$pid" 2>/dev/null || true
+  rm -f "$PIDFILE"
+  return 1
+}
+
+stop() {
+  local pid
+  if ! pid="$(running_pid)"; then
+    echo "not running"
+    return 0
+  fi
+
+  kill "$pid" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "pid $pid didn't exit on SIGTERM; sending SIGKILL" >&2
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+
+  rm -f "$PIDFILE"
+  echo "stopped (pid $pid)"
+
+  local leftover
+  leftover="$(port_pid)"
+  if [ -n "$leftover" ]; then
+    echo "warning: pid $leftover is still listening on $PORT" >&2
+  fi
+}
+
+status() {
+  local pid listening
+  pid="$(running_pid || true)"
+  listening="$(port_pid)"
+
+  if [ -n "$pid" ]; then
+    if [ -n "$listening" ]; then
+      echo "running (pid $pid), listening on $URL"
+      return 0
+    fi
+    echo "pid $pid is alive but nothing is listening on $PORT" >&2
+    return 1
+  fi
+
+  if [ -n "$listening" ]; then
+    echo "not started by bin/dev, but pid $listening is listening on $PORT" >&2
+    return 1
+  fi
+
+  echo "not running"
+  return 1
+}
+
+case "${1:-}" in
+  start)   start ;;
+  stop)    stop ;;
+  restart) stop; start ;;
+  status)  status ;;
+  log)
+    if [ ! -f "$LOGFILE" ]; then
+      echo "no log yet at $LOGFILE — start the server with: npm run dev" >&2
+      exit 1
+    fi
+    tail -f "$LOGFILE"
+    ;;
+  *)       echo "usage: bin/dev {start|stop|restart|status|log}" >&2; exit 2 ;;
+esac

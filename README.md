@@ -11,8 +11,29 @@ plaintext in a local SQLite db (`data/app.db`). Never expose it to a network.
 
 ```sh
 npm install
-npm start          # http://127.0.0.1:8323
+npm start          # foreground, Ctrl-C to quit — http://127.0.0.1:8323
 ```
+
+To leave it running without tying up a terminal:
+
+```sh
+npm run dev            # start detached (waits until it answers, then prints the URL)
+npm run dev:restart    # pick up server-side changes
+npm run dev:status     # running? which pid?
+npm run dev:log        # tail -f the log
+npm run dev:stop
+```
+
+There is no watch/auto-reload: a restart is always something you ask for, so
+saving a file can't kill an IMAP sync or flatten that's in flight. Changes
+under `public/` need no restart at all (no build step) — just reload the
+browser. Anything else — `server.js`, `src/` — needs `npm run dev:restart`.
+
+Output goes to `.run/server.log` (the previous run is kept as
+`.run/server.log.prev`), and the pid to `.run/server.pid`; `.run/` is
+gitignored. Both forms use port 8323 and the real `data/app.db`, so run one or
+the other, not both — `npm run dev` refuses to start if something else already
+holds the port. Override with `PORT=… npm run dev`.
 
 Add an account (top right). For self-hosted servers with a self-signed
 certificate, check "Allow untrusted certificate". Use "Test" before saving.
@@ -70,6 +91,7 @@ servers is unaffected — that limitation is purely in the local test server.
 
 ```
 server.js            express app (port 8323, override with PORT)
+bin/dev              start/stop/restart the server detached (state in .run/)
 src/db.js            sqlite open + schema (data dir override: EMAIL_ORG_DATA)
 src/imap/pool.js     one connection per account, all ops serialized per account
 src/imap/sync.js     folder-list + per-folder header sync (UIDVALIDITY-aware)

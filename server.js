@@ -30,8 +30,13 @@ const server = app.listen(port, '127.0.0.1', () => {
   console.log(`email-org running at http://127.0.0.1:${port}`);
 });
 
-process.on('SIGINT', async () => {
+// SIGTERM matters as much as SIGINT: `bin/dev stop` and `restart` send it.
+async function shutdown() {
+  setTimeout(() => process.exit(0), 3000).unref();  // don't hang on a wedged IMAP close
   server.close();
   await closeAll();
   process.exit(0);
-});
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

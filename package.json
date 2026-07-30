@@ -5,6 +5,11 @@
   "scripts": {
     "test": "node --test test/redundancy.test.js test/ops.test.js",
     "start": "node server.js",
+    "dev": "bin/dev start",
+    "dev:stop": "bin/dev stop",
+    "dev:restart": "bin/dev restart",
+    "dev:status": "bin/dev status",
+    "dev:log": "bin/dev log",
     "e2e": "./test/run-e2e.sh"
   },
   "keywords": [],

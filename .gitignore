@@ -1,5 +1,6 @@
 node_modules/
 data/
+.run/
 test/tmp/
 test/certs/
 test/*.dylib
