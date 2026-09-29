@@ -1,5 +1,6 @@
 import { db } from '../db.js';
 import * as pool from './pool.js';
+import { fetchByUids } from './batch.js';
 
 const upsertFolder = db.prepare(`
   INSERT INTO folders (account_id, path, name, parent_path, delimiter, selectable, no_inferiors, special_use,
@@ -136,9 +137,9 @@ export async function syncFolderMessages(folderId) {
 
       const rows = [];
       if (missingUids.length) {
-        for await (const msg of client.fetch(missingUids.join(','), {
+        for await (const msg of fetchByUids(client, missingUids, {
           uid: true, envelope: true, internalDate: true, flags: true, size: true, bodyStructure: true,
-        }, { uid: true })) {
+        })) {
           rows.push(rowFromFetch(folderId, uidValidity, msg));
         }
       }
@@ -149,7 +150,7 @@ export async function syncFolderMessages(folderId) {
       const flagUids = liveUids.filter((u) => cachedUids.has(u));
       const flagUpdates = [];
       if (flagUids.length) {
-        for await (const msg of client.fetch(flagUids.join(','), { uid: true, flags: true }, { uid: true })) {
+        for await (const msg of fetchByUids(client, flagUids, { uid: true, flags: true })) {
           flagUpdates.push({ uid: msg.uid, flags: JSON.stringify([...(msg.flags ?? [])]) });
         }
       }
@@ -163,7 +164,7 @@ export async function syncFolderMessages(folderId) {
       ).all(folderId).map((r) => r.uid).filter((u) => live.has(u) && cachedUids.has(u));
       const backfill = [];
       if (backfillUids.length) {
-        for await (const msg of client.fetch(backfillUids.join(','), { uid: true, bodyStructure: true }, { uid: true })) {
+        for await (const msg of fetchByUids(client, backfillUids, { uid: true, bodyStructure: true })) {
           if (msg.bodyStructure) backfill.push({ uid: msg.uid, count: countAttachments(msg.bodyStructure) });
         }
       }
